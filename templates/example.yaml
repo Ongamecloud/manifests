@@ -1,0 +1,117 @@
+# EXAMPLE ONLY - this is not a real game.
+#
+# Copy this file to games/<id>.yaml and replace every value. It shows every
+# top-level section of the manifest format. The format is still a first
+# draft: sections marked "draft" will be specified in more detail, and the
+# keys inside them may change before the format is declared stable.
+#
+# Values written as {{ ... }} are filled in by the probe when the server
+# starts, for example {{ server.dir }} or {{ variables.max_players }}.
+# See README.md for the full list.
+
+# Version of the manifest format this file follows.
+format_version: 1
+
+# Stable identifier. Must match the file name: games/example-game.yaml.
+id: example-game
+name: Example Game
+
+# "custom": installed by the steps below.
+# "steamcmd": installed by a single steamcmd step with the Steam app id.
+category: custom
+
+# One section per supported operating system. Leave a platform out when the
+# server does not run there; the game is then shown as unavailable on it.
+platforms:
+  linux:
+    executable: bin/example-server
+  windows:
+    executable: bin/example-server.exe
+
+# Draft. Where the version list comes from and which version is the default.
+versions:
+  source: example-release-list
+  default: latest
+  # A new server version is offered to the user as a pending update.
+  notify_updates: true
+
+# Install steps run in order. Each "type" is a brick implemented by the probe;
+# the brick names below are placeholders for illustration.
+install:
+  # Set to true only for SteamCMD games that need an account owning the game.
+  requires_owned_game: false
+  steps:
+    - type: download
+      url: "https://example.com/releases/{{ versions.selected.id }}/server-{{ platform }}.zip"
+    - type: extract
+      archive: server.zip
+      destination: "{{ server.dir }}"
+
+# Draft. Runtimes the probe installs in its own folder before launch.
+runtime: {}
+
+# Draft. Command line that starts the server.
+launch:
+  arguments:
+    - "--port={{ server.port }}"
+    - "--query-port={{ server.port.query }}"
+    - "--max-memory={{ resources.memory_max }}"
+
+# Draft. How to stop the server cleanly.
+stop:
+  console_command: stop
+
+# Every port the game uses. The first one is also {{ server.port }}.
+network:
+  ports:
+    - name: game
+      protocol: udp
+    - name: query
+      protocol: udp
+
+# Draft. Which launch argument receives the memory limit, and in what unit.
+resources:
+  memory:
+    unit: megabytes
+
+# Settings shown to the user. The form in the apps is generated from this list.
+variables:
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 10
+    min: 1
+    max: 64
+  - name: server_name
+    type: text
+    label: Server name
+    default: "{{ server.name }}"
+
+# Draft. Where each variable is written.
+bindings:
+  - variable: max_players
+    file: config/server.ini
+    key: Server.MaxPlayers
+  - variable: server_name
+    file: config/server.ini
+    key: Server.Name
+
+# Draft. Config files the probe can read and write, with their format.
+config_files:
+  - path: config/server.ini
+    format: ini
+
+# Draft. Regular expressions matched against server output.
+console:
+  ready: '^Server started on port \d+$'
+  player_join: '^Player (?P<name>.+) joined$'
+  player_leave: '^Player (?P<name>.+) left$'
+
+# What a backup keeps and what it leaves out.
+backup:
+  include:
+    - config/
+    - saves/
+  exclude:
+    - logs/
+    - cache/

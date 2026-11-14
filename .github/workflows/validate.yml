@@ -1,0 +1,32 @@
+# Checks that the schema is itself valid, then validates every manifest
+# and template against it. Runs on every pull request and on main.
+name: Validate manifests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the validator
+        run: pip install check-jsonschema==0.29.4
+
+      - name: Check the schema
+        run: check-jsonschema --check-metaschema schema/manifest.schema.json
+
+      - name: Validate manifests and templates
+        run: |
+          find games templates -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+            | xargs -0 check-jsonschema --schemafile schema/manifest.schema.json

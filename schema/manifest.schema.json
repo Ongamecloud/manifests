@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Ongamecloud/manifests/main/schema/manifest.schema.json",
+  "title": "Game manifest",
+  "description": "Declarative description of how one game server is installed, launched and configured. Data only: install steps name bricks implemented by the probe, never scripts. This is a first skeleton: it fixes the top-level sections, and each section will be specified in detail in later versions of the format.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "id",
+    "name",
+    "category",
+    "platforms",
+    "install",
+    "launch"
+  ],
+  "properties": {
+    "format_version": {
+      "description": "Version of the manifest format this file is written against. Lets tools reject a file written for a format they do not understand.",
+      "const": 1
+    },
+    "id": {
+      "description": "Stable, unique identifier of the game. Lowercase letters, digits and single hyphens. Must match the file name (games/<id>.yaml). Never change it once published: servers refer to it.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "name": {
+      "description": "Display name shown in the apps and on the website.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "category": {
+      "description": "'steamcmd' when the dedicated server is distributed through SteamCMD; 'custom' when installation and version management are handled by the manifest's own steps.",
+      "enum": [
+        "custom",
+        "steamcmd"
+      ]
+    },
+    "platforms": {
+      "description": "One section per supported operating system. A missing platform means the game is not supported there and is shown as unavailable. Only declare a platform you have verified.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "linux": {
+          "$ref": "#/$defs/platform"
+        },
+        "windows": {
+          "$ref": "#/$defs/platform"
+        },
+        "macos": {
+          "$ref": "#/$defs/platform"
+        }
+      }
+    },
+    "versions": {
+      "description": "How the list of versions offered to the user is obtained, which one is the default, and whether a newer version is reported as a pending update.",
+      "type": "object",
+      "properties": {
+        "notify_updates": {
+          "description": "true when a new server version should be offered as a pending update; false when choosing a version is a deliberate act by the user.",
+          "type": "boolean"
+        }
+      }
+    },
+    "install": {
+      "description": "Ordered install steps, plus install-level requirements such as an owning Steam account.",
+      "type": "object",
+      "required": [
+        "steps"
+      ],
+      "properties": {
+        "requires_owned_game": {
+          "description": "true when the dedicated server can only be downloaded by a Steam account that owns the game.",
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      }
+    },
+    "runtime": {
+      "description": "Runtimes the game needs (for example a Java version), installed by the probe in its own folder.",
+      "type": "object"
+    },
+    "launch": {
+      "description": "Command that starts the server. Shared by all platforms; a platform section may override parts of it.",
+      "type": "object"
+    },
+    "stop": {
+      "description": "How to stop the server cleanly, for example a console command, before the process is terminated.",
+      "type": "object"
+    },
+    "network": {
+      "description": "Network binding and every port the game uses. Each port named here becomes {{ server.port.<name> }}; the first one is also {{ server.port }}.",
+      "type": "object",
+      "properties": {
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "protocol"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+              },
+              "protocol": {
+                "enum": [
+                  "tcp",
+                  "udp",
+                  "tcp+udp"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "description": "How the game receives its memory and CPU limits, so the limit applied by the operating system and the limit the game knows always match. Use 'none' when the game takes no such parameter.",
+      "oneOf": [
+        {
+          "type": "object"
+        },
+        {
+          "const": "none"
+        }
+      ]
+    },
+    "variables": {
+      "description": "Settings the user can change. Declared once here (name, type, default, label); where each one is written is declared in 'bindings'.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "label"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+          },
+          "type": {
+            "enum": [
+              "boolean",
+              "number",
+              "text",
+              "choice"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "bindings": {
+      "description": "Where each variable is written: a launch argument, a key in a properties file, a path in a JSON, YAML or INI file.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "config_files": {
+      "description": "Configuration files the probe reads and writes, with their format.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "console": {
+      "description": "Regular expressions matched against server output to detect the ready state, a player joining and a player leaving.",
+      "type": "object"
+    },
+    "backup": {
+      "description": "Paths worth restoring ('include') and paths to leave out, such as logs and caches ('exclude').",
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "platform": {
+      "description": "Platform-specific values, such as the executable to launch, overriding the shared sections.",
+      "type": "object"
+    },
+    "step": {
+      "description": "One install step. 'type' names a brick implemented by the probe; the other keys are that brick's parameters.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+        }
+      }
+    }
+  }
+}
