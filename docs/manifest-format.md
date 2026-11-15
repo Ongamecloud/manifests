@@ -196,6 +196,7 @@ checksum when the vendor publishes one.
 | `subfolder` | no | Extract only the entries below this folder of the archive, without the folder itself. Applied after `strip_components`. |
 | `keep` | no | Files, or folders ending with `/`, relative to `dest`, left as they are when they already exist. |
 | `keep_existing` | no | `true` to leave every existing file as it is and only add missing ones. Not with `keep`. |
+| `skip_outside_links` | no | `true` to skip symbolic links whose target is absolute or leaves `dest`, instead of failing the step. `false` by default. |
 
 With `strip_components: 1` and `subfolder: Linux`, the entry
 `1458/Linux/server` becomes `server` and every other entry is skipped; an
@@ -207,6 +208,15 @@ exist yet is extracted.
 Entries that would land outside `dest`, absolute names and special files are
 refused. A symbolic link is only created when its target stays inside
 `dest`; an archive holding a link that points elsewhere fails the step.
+
+Some archives hold links the server never uses, for example a whole Linux
+root file system with links such as `bin/sh -> /bin/busybox` (the Linux
+FiveM and RedM builds). With `skip_outside_links: true`, a symbolic link
+whose target is absolute or leaves `dest` is not created and the step goes
+on; the step's progress says how many links were skipped. A skipped link is
+never followed. Every other rule stays: a link inside a linked folder, a
+target that is not portable, or a hard link leaving `dest` still fails the
+step. Only set it when the server does not need those links.
 
 ### `steamcmd`
 

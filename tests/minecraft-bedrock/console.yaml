@@ -1,0 +1,25 @@
+# Console lines used to test the regular expressions in
+# games/minecraft-bedrock.yaml. "expect" is the pattern that must match
+# (ready, player_join, player_leave) or "none"; "player" is the name the
+# pattern must capture.
+#
+# The ready and other server lines were captured from a run of server
+# 1.26.63.1 on Linux. The join and leave lines follow the server's own
+# texts ("Player connected: {}, xuid: {}" and "Player disconnected: {},
+# xuid: {}, pfid: {}"): no client joined during that run.
+
+samples:
+  - line: '[2026-11-15 21:33:17:086 INFO] Accepting clients on 0.0.0.0:19132'
+    expect: none
+  - line: '[2026-11-15 21:33:21:614 INFO] Server started.'
+    expect: ready
+  - line: '[2026-11-15 21:40:02:310 INFO] Player connected: Steve Builder, xuid: 2535411111111111'
+    expect: player_join
+    player: Steve Builder
+  - line: '[2026-11-15 21:52:44:018 INFO] Player disconnected: Steve Builder, xuid: 2535411111111111, pfid: a1b2c3d4e5f60708'
+    expect: player_leave
+    player: Steve Builder
+  - line: '[2026-11-15 21:41:00:000 INFO] [Chat] <Alex> Player connected: Steve, xuid: 1'
+    expect: none
+  - line: '[2026-11-15 21:33:24:948 INFO] Server stop requested.'
+    expect: none

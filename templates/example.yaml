@@ -77,6 +77,10 @@ install:
     # owner's copy. "keep_existing: true" would keep every existing file.
     keep:
       - config/server.ini
+    # Some archives hold symbolic links to absolute paths the server never
+    # uses (a whole Linux root file system, for example). Such a link fails
+    # the step unless "skip_outside_links: true" is set; it is then skipped.
+    skip_outside_links: false
   # The archive does not keep the execute permission of the program.
   - type: set_executable
     paths:

@@ -1,0 +1,195 @@
+# Minecraft: Bedrock Edition dedicated server, as published by Mojang on
+# minecraft.net. Source: the bedrock_server_how_to.html guide and the
+# commented server.properties shipped in the server archive, and the
+# download links document used by the minecraft.net download page.
+schema_version: 1
+id: minecraft-bedrock
+name: "Minecraft: Bedrock Edition"
+description: The official Minecraft Bedrock Edition dedicated server from Mojang.
+category: custom
+
+# Downloading the server means accepting the Minecraft EULA and Microsoft's
+# privacy statement, as the download page says.
+terms:
+  label: Minecraft End User License Agreement
+  url: https://aka.ms/MinecraftEULA
+
+# Mojang ships a Linux and a Windows server. There is no macOS server.
+platforms:
+  linux:
+    install:
+      - type: resolve_version
+        # {"result": {"links": [{"downloadType": "serverBedrockLinux",
+        # "downloadUrl": ".../bedrock-server-1.26.63.1.zip"}, ...]}}
+        # The version id is the number in the file name. Only the current
+        # release is listed.
+        url: https://net-secondary.web.minecraft-services.net/api/v1.0/download/links
+        list: result.links
+        id: downloadUrl
+        id_pattern: '/bedrock-server-(?P<id>[0-9.]+)\.zip$'
+        where:
+          downloadType: serverBedrockLinux
+        select: "{{ server.version }}"
+      - &download
+        type: download
+        url: "{{ versions.selected.downloadUrl }}"
+        dest: downloads/bedrock-server.zip
+      - &extract
+        type: extract
+        archive: downloads/bedrock-server.zip
+        # The archive ships default copies of the files the owner edits; an
+        # update replaces the server and keeps these.
+        keep:
+          - server.properties
+          - allowlist.json
+          - permissions.json
+    launch:
+      executable: bedrock_server
+      environment:
+        # The server loads the libraries next to it, as the vendor's guide
+        # says (LD_LIBRARY_PATH=. ./bedrock_server).
+        LD_LIBRARY_PATH: .
+  windows:
+    install:
+      - type: resolve_version
+        url: https://net-secondary.web.minecraft-services.net/api/v1.0/download/links
+        list: result.links
+        id: downloadUrl
+        id_pattern: '/bedrock-server-(?P<id>[0-9.]+)\.zip$'
+        where:
+          downloadType: serverBedrockWindows
+        select: "{{ server.version }}"
+      - *download
+      - *extract
+    launch:
+      executable: bedrock_server.exe
+
+# "stop" saves the world and stops the server.
+stop:
+  command: stop
+  timeout_seconds: 60
+
+# With the default "nethernet" transport the server accepts clients on
+# server-port over TCP, and carries their traffic over UDP on
+# server-udp-ports, set here to the same port. server-portv6 is ignored
+# with this transport. LAN discovery (UDP 7551) only reaches the local
+# network and is not declared.
+network:
+  ports:
+    - name: game
+      protocol: tcp+udp
+      default: 19132
+      label: Game
+
+resources: none
+
+variables:
+  - name: level_name
+    type: text
+    label: World name
+    description: The world folder in worlds/. A new world is created when none has this name.
+    default: Bedrock level
+    max_length: 64
+  - name: gamemode
+    type: choice
+    label: Game mode
+    default: survival
+    choices:
+      - value: survival
+        label: Survival
+      - value: creative
+        label: Creative
+      - value: adventure
+        label: Adventure
+  - name: difficulty
+    type: choice
+    label: Difficulty
+    default: easy
+    choices:
+      - value: peaceful
+        label: Peaceful
+      - value: easy
+        label: Easy
+      - value: normal
+        label: Normal
+      - value: hard
+        label: Hard
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 10
+    min: 1
+    max: 200
+    integer: true
+  - name: allow_cheats
+    type: boolean
+    label: Allow cheats
+    default: false
+  # The server's own default is true, which refuses every player not
+  # listed in allowlist.json; off here so friends can join a new server.
+  - name: allow_list
+    type: boolean
+    label: Only players on the allow list
+    description: Players are added to the allow list with the "allowlist add" console command.
+    default: false
+  - name: level_seed
+    type: text
+    label: World seed
+    description: Only used when the world is created. Empty for a random seed.
+    default: ""
+    max_length: 64
+
+config_files:
+  - path: server.properties
+    format: properties
+
+bindings:
+  - file: server.properties
+    key: server-name
+    value: "{{ server.name }}"
+  - file: server.properties
+    key: server-ip
+    value: "{{ server.ip }}"
+  - file: server.properties
+    key: server-port
+    value: "{{ server.port }}"
+  - file: server.properties
+    key: server-udp-ports
+    value: "{{ server.port }}"
+  - file: server.properties
+    key: level-name
+    variable: level_name
+  - file: server.properties
+    key: gamemode
+    variable: gamemode
+  - file: server.properties
+    key: difficulty
+    variable: difficulty
+  - file: server.properties
+    key: max-players
+    variable: max_players
+  - file: server.properties
+    key: allow-cheats
+    variable: allow_cheats
+  - file: server.properties
+    key: allow-list
+    variable: allow_list
+  - file: server.properties
+    key: level-seed
+    variable: level_seed
+
+# Lines start with "[<date> <time> INFO]", which a player cannot type, so a
+# chat message cannot imitate a join. Sample lines:
+# tests/minecraft-bedrock/console.yaml.
+console:
+  ready: '^\[[0-9-]+ [0-9:]+ INFO\] Server started\.$'
+  player_join: '^\[[0-9-]+ [0-9:]+ INFO\] Player connected: (?P<player>[^,]+), xuid: '
+  player_leave: '^\[[0-9-]+ [0-9:]+ INFO\] Player disconnected: (?P<player>[^,]+), xuid: '
+
+# Worlds, the configuration and the player lists.
+backup:
+  include:
+    - worlds/
+    - server.properties
+    - allowlist.json
+    - permissions.json

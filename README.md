@@ -35,8 +35,11 @@ The repository is public and open to contributions. See
 | BeamNG.drive (BeamMP server) | [`games/beamng-drive.yaml`](games/beamng-drive.yaml) | yes | yes | no |
 | DayZ (Steam account that owns the game) | [`games/dayz.yaml`](games/dayz.yaml) | yes | yes | no |
 | Factorio | [`games/factorio.yaml`](games/factorio.yaml) | yes | no | no |
+| FiveM (Grand Theft Auto V) | [`games/fivem.yaml`](games/fivem.yaml) | yes | yes | no |
 | Garry's Mod | [`games/garrys-mod.yaml`](games/garrys-mod.yaml) | yes | yes | no |
+| Minecraft: Bedrock Edition | [`games/minecraft-bedrock.yaml`](games/minecraft-bedrock.yaml) | yes | yes | no |
 | Minecraft: Java Edition | [`games/minecraft-java.yaml`](games/minecraft-java.yaml) | yes | yes | yes |
+| RedM (Red Dead Redemption 2) | [`games/redm.yaml`](games/redm.yaml) | yes | yes | no |
 | Rust | [`games/rust.yaml`](games/rust.yaml) | yes | yes | no |
 | Terraria | [`games/terraria.yaml`](games/terraria.yaml) | yes | yes | no |
 | Valheim | [`games/valheim.yaml`](games/valheim.yaml) | yes | yes | no |

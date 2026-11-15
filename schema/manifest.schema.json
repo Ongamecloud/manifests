@@ -612,6 +612,10 @@
         "keep_existing": {
           "description": "true to leave every existing file as it is and only add missing ones. Not with 'keep'.",
           "type": "boolean"
+        },
+        "skip_outside_links": {
+          "description": "true to skip symbolic links whose target is absolute or leaves 'dest', instead of failing the step. A skipped link is never created, so never followed. False by default.",
+          "type": "boolean"
         }
       },
       "if": {
