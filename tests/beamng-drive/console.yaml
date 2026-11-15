@@ -1,0 +1,28 @@
+# Console lines used to test the regular expressions in
+# games/beamng-drive.yaml. "expect" is the pattern that must match (ready,
+# player_join, player_leave) or "none"; "player" is the name the pattern
+# must capture.
+#
+# The startup lines were captured from a run of BeamMP-Server v3.9.3 on
+# Linux. The ready, join and leave lines use the texts of the server's
+# source code ("ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY",
+# "<name> : Connected", "<name> Connection Terminated"): that run had no
+# valid AuthKey, so it never reached the ready state, and no client joined.
+
+samples:
+  - line: '[15/11/26 21:52:23] [INFO] Listening on 0.0.0.0 port 30814'
+    expect: none
+  - line: '[15/11/26 21:52:23] [INFO] PluginMonitor started'
+    expect: none
+  - line: '[15/11/26 21:52:25] [INFO] ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY'
+    expect: ready
+  - line: '[15/11/26 21:58:02] [INFO] Identification success'
+    expect: none
+  - line: '[15/11/26 21:58:03] [INFO] Steve : Connected'
+    expect: player_join
+    player: Steve
+  - line: '[15/11/26 21:59:10] [CHAT] (1) <Alex> Steve : Connected'
+    expect: none
+  - line: '[15/11/26 22:10:41] [INFO] Steve Connection Terminated'
+    expect: player_leave
+    player: Steve

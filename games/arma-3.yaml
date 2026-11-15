@@ -19,6 +19,7 @@ platforms:
       executable: arma3server_x64
       arguments: &arguments
         - "-port={{ server.port.game }}"
+        - -config=server.cfg
         # The profile (difficulty settings, logs) is kept in profiles/.
         - -name=server
         - -profiles=profiles
@@ -32,6 +33,23 @@ platforms:
 install:
   - type: steamcmd
     app_id: "233780"
+  # The server settings file passed with -config, created once with a few
+  # defaults. The settings of the server form are written into it, and the
+  # owner may add any other setting from Bohemia's "Arma 3: Server Config
+  # File" page.
+  - type: write_file
+    dest: server.cfg
+    if_missing: true
+    content: |
+      // Arma 3 server configuration.
+      hostname = "Arma 3 Server";
+      password = "";
+      passwordAdmin = "";
+      maxPlayers = 32;
+      motd[] = {};
+      persistent = 1;
+      verifySignatures = 2;
+      BattlEye = 1;
 
 # The server reads no console commands, so the probe asks the process to
 # exit.
@@ -40,7 +58,7 @@ stop:
 
 # The game takes one port with -port and uses the next ones itself: Steam
 # query on port + 1, Steam on port + 2 and BattlEye on port + 4 (port + 3 is
-# reserved). They always follow the game port.
+# reserved). They are derived from the game port, so they always follow it.
 network:
   ports:
     - name: game
@@ -49,32 +67,77 @@ network:
       label: Game
     - name: query
       protocol: udp
-      default: 2303
+      from: game
+      offset: 1
       label: Steam query
     - name: steam
       protocol: udp
-      default: 2304
+      from: game
+      offset: 2
       label: Steam
     - name: battleye
       protocol: udp
-      default: 2306
+      from: game
+      offset: 4
       label: BattlEye
 
 resources: none
 
-# The server settings (name, password, missions) live in a server.cfg file
-# passed with -config. The probe cannot write that format yet, and the
-# server needs the file to exist, so the server starts with the game's
-# defaults and there are no variables.
+variables:
+  - name: password
+    type: text
+    label: Server password
+    description: Empty for no password.
+    default: ""
+    max_length: 64
+  - name: admin_password
+    type: text
+    label: Admin password
+    description: Lets a player log in as administrator with "#login". Empty disables it.
+    default: ""
+    max_length: 64
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 32
+    min: 1
+    max: 256
+    integer: true
+  - name: battleye
+    type: boolean
+    label: BattlEye anti-cheat
+    default: true
+
+config_files:
+  - path: server.cfg
+    format: bohemia
+
+bindings:
+  - file: server.cfg
+    key: hostname
+    value: "{{ server.name }}"
+  - file: server.cfg
+    key: password
+    variable: password
+  - file: server.cfg
+    key: passwordAdmin
+    variable: admin_password
+  - file: server.cfg
+    key: maxPlayers
+    variable: max_players
+  - file: server.cfg
+    key: BattlEye
+    variable: battleye
 
 # Player connections are written to the log in profiles/, not reliably to
 # the server output, so there are no console patterns.
 
-# The profile with its difficulty settings and saved missions, and the
-# missions folder (missions uploaded by the owner). Logs and crash dumps are
-# left out.
+# The settings file, the profile with its difficulty settings and saved
+# missions, and the missions folder (missions uploaded by the owner). Logs
+# and crash dumps are left out.
 backup:
   include:
+    - server.cfg
     - profiles/
     - mpmissions/
   exclude:

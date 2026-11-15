@@ -53,6 +53,17 @@ NOT_RE2 = [
     (re.compile(r"[*+?}]\+"), "possessive quantifier"),
 ]
 CONSOLE_KEYS = ("ready", "player_join", "player_leave")
+# Config file formats addressed by key, those with sections, and those
+# that hold text only. The others (JSON, YAML) are addressed by path.
+KEY_FORMATS = ("properties", "ini", "toml", "cfx", "bohemia")
+SECTION_FORMATS = ("ini", "toml", "bohemia")
+TEXT_FORMATS = ("properties", "ini")
+CFX_COMMANDS = ("set", "sets", "setr", "seta")
+BOHEMIA_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# Step parameters holding one path, or a list of paths, inside the server
+# directory.
+STEP_PATHS = ("dest", "archive", "subfolder", "executable", "working_dir", "unless_exists")
+STEP_PATH_LISTS = ("keep", "paths")
 # Parameters of the steamcmd brick, as the probe checks them. A branch
 # password is passed to SteamCMD as one argument, so it has no spaces and
 # does not start with "+" or "-", which SteamCMD would read as a command.
@@ -144,10 +155,20 @@ def check_manifest(path, manifest, errors):
             errors.append(f"{where}: default is longer than max_length")
 
     ports = []
+    declared = {p["name"]: p for p in manifest.get("network", {}).get("ports", [])}
     for i, port in enumerate(manifest.get("network", {}).get("ports", [])):
         if port["name"] in ports:
             errors.append(f"network.ports[{i}]: port {port['name']!r} is declared twice")
         ports.append(port["name"])
+        base = port.get("from")
+        if base is None:
+            continue
+        if base == port["name"]:
+            errors.append(f"network.ports[{i}].from: a port cannot be derived from itself")
+        elif base not in declared:
+            errors.append(f"network.ports[{i}].from: port {base!r} is not declared")
+        elif "from" in declared[base]:
+            errors.append(f"network.ports[{i}].from: port {base!r} is itself derived; derive from the port it comes from")
 
     resources = manifest["resources"]
     memory = resources.get("memory") if isinstance(resources, dict) else None
@@ -172,18 +193,34 @@ def check_manifest(path, manifest, errors):
             continue
         if "variable" in b and b["variable"] not in variables:
             errors.append(f"{where}: variable {b['variable']!r} is not declared")
-        if fmt in ("properties", "ini"):
+        if fmt in KEY_FORMATS:
             if "key" not in b or "path" in b:
                 errors.append(f"{where}: a {fmt} file takes 'key', not 'path'")
-            if "section" in b and fmt != "ini":
-                errors.append(f"{where}: 'section' is only for INI files")
-            target = (b["file"], b.get("section"), b.get("key"))
+                continue
+            if "section" in b and fmt not in SECTION_FORMATS:
+                errors.append(f"{where}: 'section' is only for INI, TOML and bohemia files")
+            key, section = b["key"], b.get("section")
+            if fmt == "cfx":
+                # "set onesync" and "onesync" set the same name; Cfx ignores case.
+                fields = key.split()
+                if not 1 <= len(fields) <= 2 or (len(fields) == 2 and fields[0].lower() not in CFX_COMMANDS):
+                    errors.append(f"{where}.key: {key!r} is a name, or set, sets, setr or seta and a name")
+                key = fields[-1].lower() if fields else key
+                if '"' in b.get("value", ""):
+                    errors.append(f"{where}.value: a cfx file cannot hold a double quote")
+            if fmt == "bohemia":
+                if not BOHEMIA_NAME.match(key):
+                    errors.append(f"{where}.key: {key!r} is not an entry name (letters, digits and _)")
+                if section is not None and not all(BOHEMIA_NAME.match(c) for c in section.split(".")):
+                    errors.append(f"{where}.section: {section!r} is not a list of class names separated by dots")
+                key, section = key.lower(), section.lower() if section else section
+            target = (b["file"], section, key)
         else:
             if "path" not in b or "key" in b or "section" in b:
                 errors.append(f"{where}: a {fmt} file takes 'path', not 'key' or 'section'")
             target = (b["file"], tuple(b.get("path", [])))
-        if "as" in b and fmt in ("properties", "ini"):
-            errors.append(f"{where}: 'as' only applies to JSON and YAML files")
+        if "as" in b and fmt in TEXT_FORMATS:
+            errors.append(f"{where}: 'as' does not apply to {fmt} files, which hold text only")
         if target in targets:
             errors.append(f"{where}: another binding already writes this key")
         targets.add(target)
@@ -225,9 +262,16 @@ def check_manifest(path, manifest, errors):
     step_lists += [(f"platforms.{n}.install", p.get("install")) for n, p in manifest["platforms"].items()]
     for where, steps in step_lists:
         for i, step in enumerate(steps or []):
-            for key in ("dest", "archive"):
+            at = f"{where}[{i}]"
+            for key in STEP_PATHS:
                 if key in step:
-                    check_path(f"{where}[{i}].{key}", step[key], errors)
+                    check_path(f"{at}.{key}", step[key], errors)
+            for key in STEP_PATH_LISTS:
+                for j, item in enumerate(step.get(key, [])):
+                    check_path(f"{at}.{key}[{j}]", item, errors)
+            # A pattern holding a placeholder is checked by the probe once rendered.
+            if "id_pattern" in step and "{{" not in step["id_pattern"]:
+                check_regex(f"{at}.id_pattern", step["id_pattern"], "id", errors)
     check_steam(manifest, step_lists, errors)
     for i, item in enumerate(manifest.get("backup", {}).get("include", [])):
         check_path(f"backup.include[{i}]", item, errors)
@@ -241,6 +285,17 @@ def check_manifest(path, manifest, errors):
             continue
         if "executable" in launch:
             check_path(f"{where}.executable", launch["executable"], errors)
+        if "working_dir" in launch:
+            check_path(f"{where}.working_dir", launch["working_dir"], errors)
+        for i, arg in enumerate(launch.get("arguments", [])):
+            if isinstance(arg, str):
+                continue
+            name = arg.get("when", arg.get("unless"))
+            var = variables.get(name)
+            if var is None:
+                errors.append(f"{where}.arguments[{i}]: variable {name!r} is not declared")
+            elif var["type"] != "boolean":
+                errors.append(f"{where}.arguments[{i}]: variable {name!r} is a {var['type']} variable; when and unless take a boolean one")
         if launch.get("runtime") and launch["runtime"] not in manifest.get("runtime", {}):
             errors.append(f"{where}: runtime {launch['runtime']!r} is not declared in 'runtime'")
 
@@ -284,19 +339,9 @@ def check_console(path, manifest, errors):
     for key in CONSOLE_KEYS:
         if key not in console:
             continue
-        source = console[key]
-        for construct, label in NOT_RE2:
-            if construct.search(source):
-                errors.append(f"console.{key}: {label} is not supported (RE2 syntax)")
-        try:
-            pattern = re.compile(source)
-        except re.error as e:
-            errors.append(f"console.{key}: invalid regular expression: {e}")
-            continue
-        if key != "ready" and "player" not in pattern.groupindex:
-            errors.append(f"console.{key}: needs a group named 'player', like (?P<player>...)")
-            continue
-        patterns[key] = pattern
+        pattern = check_regex(f"console.{key}", console[key], None if key == "ready" else "player", errors)
+        if pattern is not None:
+            patterns[key] = pattern
 
     if path.parent.resolve() != (ROOT / "games").resolve():
         return
@@ -327,6 +372,25 @@ def check_console(path, manifest, errors):
     for key in patterns:
         if key not in tested:
             errors.append(f"console.{key}: no sample line in {samples_path.relative_to(ROOT)} matches it")
+
+
+def check_regex(where, source, group, errors):
+    """Compile an RE2 expression, which must have the named group when
+    group is set. Returns the pattern, or None after reporting a problem."""
+    bad = False
+    for construct, label in NOT_RE2:
+        if construct.search(source):
+            errors.append(f"{where}: {label} is not supported (RE2 syntax)")
+            bad = True
+    try:
+        pattern = re.compile(source)
+    except re.error as e:
+        errors.append(f"{where}: invalid regular expression: {e}")
+        return None
+    if group and group not in pattern.groupindex:
+        errors.append(f"{where}: needs a group named {group!r}, like (?P<{group}>...)")
+        return None
+    return None if bad else pattern
 
 
 def load_validator():

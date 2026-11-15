@@ -1,0 +1,206 @@
+# BeamNG.drive multiplayer server: BeamMP-Server, published by the BeamMP
+# team on GitHub (BeamMP/BeamMP-Server). Source: the BeamMP server
+# documentation (docs.beammp.com), the ServerConfig.toml the server writes
+# on its first start, and the server's source code for its log lines.
+schema_version: 1
+id: beamng-drive
+name: BeamNG.drive (BeamMP)
+description: The BeamMP multiplayer server for BeamNG.drive.
+category: custom
+
+# BeamMP publishes Linux and Windows servers. There is no macOS server.
+platforms:
+  linux:
+    install:
+      - type: resolve_version
+        # The GitHub releases API: a JSON array of releases, newest first.
+        # Each release lists its files in "assets".
+        url: https://api.github.com/repos/BeamMP/BeamMP-Server/releases
+        list: "."
+        id: tag_name
+        select: "{{ server.version }}"
+        where:
+          prerelease: "false"
+        elements:
+          # The Linux builds differ only by the distribution they were built
+          # on; the Ubuntu 22.04 one needs the oldest C library, so it runs
+          # on the most systems.
+          asset:
+            list: assets
+            where:
+              name: BeamMP-Server.ubuntu.22.04.x86_64
+      - type: download
+        url: "{{ versions.selected.asset.browser_download_url }}"
+        dest: BeamMP-Server
+      - type: set_executable
+        paths:
+          - BeamMP-Server
+    launch:
+      executable: BeamMP-Server
+  windows:
+    install:
+      - type: resolve_version
+        url: https://api.github.com/repos/BeamMP/BeamMP-Server/releases
+        list: "."
+        id: tag_name
+        select: "{{ server.version }}"
+        where:
+          prerelease: "false"
+        elements:
+          asset:
+            list: assets
+            where:
+              name: BeamMP-Server.exe
+      - type: download
+        url: "{{ versions.selected.asset.browser_download_url }}"
+        dest: BeamMP-Server.exe
+    launch:
+      executable: BeamMP-Server.exe
+
+# "exit" shuts the server down cleanly in a few seconds, then the program
+# waits for console input, so the probe ends it after the timeout. The
+# server keeps no world to save.
+stop:
+  command: exit
+  timeout_seconds: 15
+
+# Players connect over TCP and the vehicle data travels over UDP, both on
+# the same port.
+network:
+  ports:
+    - name: game
+      protocol: tcp+udp
+      default: 30814
+      label: Game
+
+resources: none
+
+variables:
+  - name: auth_key
+    type: text
+    label: AuthKey
+    description: Required. Create a key on keymaster.beammp.com; the server does not start without one.
+    default: ""
+    max_length: 64
+  - name: private
+    type: boolean
+    label: Private server
+    description: A private server is not shown in the BeamMP server list; players join by address.
+    default: true
+  - name: description
+    type: text
+    label: Description
+    default: BeamMP server
+    max_length: 300
+  - name: map
+    type: choice
+    label: Map
+    default: gridmap_v2
+    choices:
+      - value: gridmap_v2
+        label: Grid Map
+      - value: west_coast_usa
+        label: West Coast, USA
+      - value: east_coast_usa
+        label: East Coast, USA
+      - value: italy
+        label: Italy
+      - value: utah
+        label: Utah, USA
+      - value: johnson_valley
+        label: Johnson Valley
+      - value: jungle_rock_island
+        label: Jungle Rock Island
+      - value: small_island
+        label: Small Island, USA
+      - value: industrial
+        label: Industrial Site
+      - value: hirochi_raceway
+        label: Hirochi Raceway
+      - value: automation_test_track
+        label: Automation Test Track
+      - value: driver_training
+        label: Driver Training
+      - value: derby
+        label: Derby Arenas
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 8
+    min: 1
+    max: 100
+    integer: true
+  - name: max_cars
+    type: number
+    label: Vehicles per player
+    default: 1
+    min: 1
+    max: 20
+    integer: true
+  - name: allow_guests
+    type: boolean
+    label: Allow guests
+    description: Guests play without a BeamMP account.
+    default: true
+
+config_files:
+  - path: ServerConfig.toml
+    format: toml
+
+bindings:
+  - file: ServerConfig.toml
+    section: General
+    key: Name
+    value: "{{ server.name }}"
+  - file: ServerConfig.toml
+    section: General
+    key: IP
+    value: "{{ server.ip }}"
+  - file: ServerConfig.toml
+    section: General
+    key: Port
+    value: "{{ server.port }}"
+    as: number
+  - file: ServerConfig.toml
+    section: General
+    key: AuthKey
+    variable: auth_key
+  - file: ServerConfig.toml
+    section: General
+    key: Private
+    variable: private
+  - file: ServerConfig.toml
+    section: General
+    key: Description
+    variable: description
+  - file: ServerConfig.toml
+    section: General
+    key: Map
+    value: "/levels/{{ variables.map }}/info.json"
+  - file: ServerConfig.toml
+    section: General
+    key: MaxPlayers
+    variable: max_players
+  - file: ServerConfig.toml
+    section: General
+    key: MaxCars
+    variable: max_cars
+  - file: ServerConfig.toml
+    section: General
+    key: AllowGuests
+    variable: allow_guests
+
+# Lines start with "[<date> <time>] [INFO]"; chat lines are tagged [CHAT]
+# instead, so a chat message cannot imitate a join. Sample lines:
+# tests/beamng-drive/console.yaml.
+console:
+  ready: '^\[[0-9/]+ [0-9:.]+\] \[INFO\] ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY$'
+  player_join: '^\[[0-9/]+ [0-9:.]+\] \[INFO\] (?P<player>.+) : Connected$'
+  player_leave: '^\[[0-9/]+ [0-9:.]+\] \[INFO\] (?P<player>.+) Connection Terminated$'
+
+# The configuration and the Resources folder (server plugins and the
+# client mods the server sends to players).
+backup:
+  include:
+    - ServerConfig.toml
+    - Resources/

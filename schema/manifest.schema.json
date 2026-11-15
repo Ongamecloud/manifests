@@ -352,6 +352,8 @@
             "resolve_version",
             "download",
             "extract",
+            "set_executable",
+            "run_program",
             "steamcmd",
             "write_file"
           ]
@@ -398,6 +400,30 @@
           "if": {
             "properties": {
               "type": {
+                "const": "set_executable"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_set_executable"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "run_program"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_run_program"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "steamcmd"
               }
             }
@@ -436,8 +462,15 @@
           "$ref": "#/$defs/template_url"
         },
         "list": {
-          "description": "Dotted path to the array of versions. Without it, the whole document is the selected version.",
-          "$ref": "#/$defs/dotted_path"
+          "description": "Dotted path to the array of versions, or '.' when the document itself is the array (the GitHub releases API, for example). Without it, the whole document is the selected version.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/dotted_path"
+            },
+            {
+              "const": "."
+            }
+          ]
         },
         "select": {
           "description": "The version id to pick, or 'latest'. Usually {{ server.version }}.",
@@ -454,6 +487,35 @@
         },
         "where": {
           "$ref": "#/$defs/where"
+        },
+        "id_pattern": {
+          "description": "RE2 regular expression with a group named 'id', like (?P<id>...). Entries whose id does not match are skipped, and the id becomes the text of the group. Other named groups become fields.",
+          "type": "string",
+          "minLength": 1
+        },
+        "elements": {
+          "description": "Named picks inside the selected version: for each name, the first item of the array at 'list' whose fields have the values in 'where'. Its fields become {{ versions.selected.<name>.<field> }}, for example a release asset picked by its file name.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "list",
+              "where"
+            ],
+            "properties": {
+              "list": {
+                "$ref": "#/$defs/dotted_path"
+              },
+              "where": {
+                "$ref": "#/$defs/where"
+              }
+            }
+          }
         }
       },
       "dependentRequired": {
@@ -470,6 +532,9 @@
           "list"
         ],
         "where": [
+          "list"
+        ],
+        "id_pattern": [
           "list"
         ]
       }
@@ -531,6 +596,100 @@
           "description": "Number of leading path elements to drop from every entry.",
           "type": "integer",
           "minimum": 0
+        },
+        "subfolder": {
+          "description": "Extract only the entries below this folder of the archive, without the folder itself. Applied after strip_components. An archive without that folder fails the step.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "keep": {
+          "description": "Files, or folders ending with '/', relative to 'dest', that are left as they are when they already exist. An update then replaces the server's files without overwriting the configuration files its archive also ships. A kept file that does not exist yet is extracted.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relative_path"
+          }
+        },
+        "keep_existing": {
+          "description": "true to leave every existing file as it is and only add missing ones. Not with 'keep'.",
+          "type": "boolean"
+        }
+      },
+      "if": {
+        "required": [
+          "keep_existing"
+        ],
+        "properties": {
+          "keep_existing": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "keep"
+          ]
+        }
+      }
+    },
+    "step_set_executable": {
+      "description": "Mark files as programs the system may run (rwxr-xr-x). A program downloaded on its own, or extracted from an archive built on Windows, has no execute permission on Linux and macOS. On Windows the step only checks that the files exist.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "paths"
+      ],
+      "properties": {
+        "type": {
+          "const": "set_executable"
+        },
+        "paths": {
+          "description": "Files to mark, relative to the server directory.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relative_path"
+          }
+        }
+      }
+    },
+    "step_run_program": {
+      "description": "Run a program of the server directory once during the install, for a server that must prepare something before its first start (Factorio creates its save this way). A program and its arguments, never a script: nothing goes through a shell. It runs with the same isolation and limits as the server. An exit code other than 0, or a program still running after timeout_seconds, fails the step.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "executable"
+      ],
+      "properties": {
+        "type": {
+          "const": "run_program"
+        },
+        "executable": {
+          "description": "Program to run, relative to the server directory.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "arguments": {
+          "description": "Arguments passed as they are, one list item per argument. Placeholders are rendered.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "working_dir": {
+          "description": "Directory the program runs in, relative to the server directory. The server directory by default.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "unless_exists": {
+          "description": "Path that, when it exists, skips the step. Use the file the program creates, so later installs and updates never run it again over the user's own data.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "timeout_seconds": {
+          "description": "How long the program may run; 600 by default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
         }
       }
     },
@@ -593,6 +752,10 @@
         },
         "content": {
           "type": "string"
+        },
+        "if_missing": {
+          "description": "true to write the file only when it does not exist yet, so a default configuration file is created once and never overwritten by an update.",
+          "type": "boolean"
         }
       }
     },
@@ -627,7 +790,7 @@
       }
     },
     "launch": {
-      "description": "The server process: either a runtime's main program ('runtime') or a file in the server directory ('executable'), and its arguments. The working directory is always the server directory. Nothing is passed through a shell.",
+      "description": "The server process: either a runtime's main program ('runtime') or a file in the server directory ('executable'), and its arguments. It runs in the server directory unless 'working_dir' says otherwise. Nothing is passed through a shell.",
       "type": "object",
       "additionalProperties": false,
       "oneOf": [
@@ -650,14 +813,22 @@
           ]
         },
         "executable": {
-          "description": "File to run, relative to the server directory.",
+          "description": "File to run, relative to the server directory (also when 'working_dir' is set).",
           "$ref": "#/$defs/relative_path"
         },
         "arguments": {
-          "description": "Arguments passed as they are, one list item per argument. Placeholders are rendered; there is no quoting or word splitting.",
+          "description": "Arguments passed as they are, one list item per argument. Placeholders are rendered; there is no quoting or word splitting. An item may also be a group of arguments added only when a boolean variable is true ('when') or false ('unless').",
           "type": "array",
           "items": {
-            "type": "string"
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "$ref": "#/$defs/argument_group"
+            },
+            "else": {
+              "type": "string"
+            }
           }
         },
         "environment": {
@@ -667,6 +838,47 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "working_dir": {
+          "description": "Directory the server runs in, relative to the server directory. The server directory by default. Use it for a server that must be started from one of its own folders.",
+          "$ref": "#/$defs/relative_path"
+        }
+      }
+    },
+    "argument_group": {
+      "description": "Launch arguments added in place when a declared boolean variable is true ('when') or false ('unless'). Exactly one of the two.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arguments"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "when"
+          ]
+        },
+        {
+          "required": [
+            "unless"
+          ]
+        }
+      ],
+      "properties": {
+        "when": {
+          "description": "Boolean variable: the arguments are added when it is true.",
+          "$ref": "#/$defs/name"
+        },
+        "unless": {
+          "description": "Boolean variable: the arguments are added when it is false.",
+          "$ref": "#/$defs/name"
+        },
+        "arguments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
             "type": "string"
           }
         }
@@ -721,15 +933,65 @@
                 ]
               },
               "default": {
-                "description": "The port the game uses out of the box. The probe uses it when it is free; the server may be given another one.",
+                "description": "The port the game uses out of the box. The probe uses it when it is free; the server may be given another one. Not set on a derived port.",
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 65535
               },
+              "from": {
+                "description": "Name of another declared port this one is derived from. A derived port is always that port plus 'offset', whatever number the server was given: for a game that picks its query port itself as the game port + 1, for example.",
+                "$ref": "#/$defs/name"
+              },
+              "offset": {
+                "description": "With 'from': the difference with that port, from -1000 to 1000, not 0.",
+                "type": "integer",
+                "minimum": -1000,
+                "maximum": 1000,
+                "not": {
+                  "const": 0
+                }
+              },
               "label": {
                 "$ref": "#/$defs/label"
               }
-            }
+            },
+            "allOf": [
+              {
+                "description": "A derived port has an offset and no default of its own.",
+                "if": {
+                  "required": [
+                    "from"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "offset"
+                  ],
+                  "not": {
+                    "required": [
+                      "default"
+                    ]
+                  }
+                }
+              },
+              {
+                "description": "An offset only applies to a derived port.",
+                "if": {
+                  "not": {
+                    "required": [
+                      "from"
+                    ]
+                  }
+                },
+                "then": {
+                  "not": {
+                    "required": [
+                      "offset"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         }
       }
@@ -923,7 +1185,7 @@
       "unevaluatedProperties": false
     },
     "binding": {
-      "description": "One value written to a configuration file declared in 'config_files'. Either 'variable' (a user setting) or 'value' (fixed text, which may hold placeholders). 'key' is used for properties and INI files ('section' too for INI), 'path' for JSON and YAML.",
+      "description": "One value written to a configuration file declared in 'config_files'. Either 'variable' (a user setting) or 'value' (fixed text, which may hold placeholders). 'key' is used for properties, INI, TOML, cfx and bohemia files ('section' too for INI, TOML and bohemia), 'path' for JSON and YAML.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -949,7 +1211,7 @@
           "type": "string"
         },
         "as": {
-          "description": "Type a 'value' is written as in JSON and YAML files: 'text' by default. A variable is always written with its own type.",
+          "description": "Type a 'value' is written as in JSON, YAML, TOML, cfx and bohemia files: 'text' by default. A variable is always written with its own type. Properties and INI files hold text only.",
           "enum": [
             "text",
             "number",
@@ -960,12 +1222,12 @@
           "$ref": "#/$defs/relative_path"
         },
         "key": {
-          "description": "The key, written exactly as in the file. Dots are part of the key.",
+          "description": "The key, written exactly as in the file; dots are part of the key. In a cfx file, the name a line sets, optionally with the command that sets it: 'sv_maxclients', 'set onesync', 'sets sv_projectName'. In a bohemia file, an entry name such as 'maxPlayers'.",
           "type": "string",
           "minLength": 1
         },
         "section": {
-          "description": "INI section holding the key. Left out: the key is before any section.",
+          "description": "INI section, TOML table ('a.b' when nested) or bohemia class ('Missions.DayZ') holding the key. Left out: the top of the file.",
           "type": "string",
           "minLength": 1
         },
@@ -1005,11 +1267,15 @@
           "$ref": "#/$defs/relative_path"
         },
         "format": {
+          "description": "How the probe reads and writes the file: Java properties, JSON, YAML, INI, TOML, the Cfx server.cfg of FiveM and RedM ('cfx'), or the Bohemia .cfg of DayZ and Arma ('bohemia').",
           "enum": [
             "properties",
             "json",
             "yaml",
-            "ini"
+            "ini",
+            "toml",
+            "cfx",
+            "bohemia"
           ]
         }
       }

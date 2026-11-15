@@ -1,0 +1,188 @@
+# Terraria dedicated server, as published by Re-Logic on terraria.org.
+# Source: the "Server" page of the official Terraria wiki (command-line
+# options and serverconfig.txt keys), and the TerrariaServer start script
+# shipped in the server archive.
+schema_version: 1
+id: terraria
+name: Terraria
+description: The official Terraria dedicated server from Re-Logic.
+category: custom
+
+# Re-Logic ships one archive per version with a folder per platform:
+# <version>/Linux, <version>/Windows and <version>/Mac. Each platform
+# extracts only its own folder. The macOS server is left out: its start
+# script runs a helper script, which a manifest cannot do, and it has not
+# been tested.
+platforms:
+  linux:
+    install:
+      - &resolve
+        type: resolve_version
+        # A JSON array of archive names, newest first, for example
+        # "terraria-server-1458.zip". The version id is the number.
+        url: https://terraria.org/api/get/dedicated-servers-names
+        list: "."
+        select: "{{ server.version }}"
+        id_pattern: '^terraria-server-(?P<id>[0-9]+)\.zip$'
+      - &download
+        type: download
+        url: "https://terraria.org/api/download/pc-dedicated-server/{{ versions.selected.value }}"
+        dest: downloads/terraria-server.zip
+      - type: extract
+        archive: downloads/terraria-server.zip
+        strip_components: 1
+        subfolder: Linux
+      # The archive is built on Windows, so the program has no execute
+      # permission once extracted.
+      - type: set_executable
+        paths:
+          - TerrariaServer.bin.x86_64
+      - &config
+        type: write_file
+        dest: serverconfig.txt
+        if_missing: true
+        content: |
+          # Terraria server configuration. The settings of the server form
+          # are written below; other keys from the Terraria wiki can be added.
+          worldpath=worlds
+          secure=1
+    launch:
+      executable: TerrariaServer.bin.x86_64
+      arguments: &arguments
+        - -config
+        - serverconfig.txt
+        - -ip
+        - "{{ server.ip }}"
+        - -port
+        - "{{ server.port }}"
+      environment:
+        # Set by the vendor's start script: file names ignore case, as on
+        # Windows.
+        MONO_IOMAP: all
+  windows:
+    install:
+      - *resolve
+      - *download
+      - type: extract
+        archive: downloads/terraria-server.zip
+        strip_components: 1
+        subfolder: Windows
+        # The Windows folder ships its own commented serverconfig.txt; an
+        # update keeps the owner's copy.
+        keep:
+          - serverconfig.txt
+      - *config
+    launch:
+      executable: TerrariaServer.exe
+      arguments: *arguments
+
+# "exit" saves the world and stops the server.
+stop:
+  command: exit
+  timeout_seconds: 60
+
+network:
+  ports:
+    - name: game
+      protocol: tcp
+      default: 7777
+      label: Game
+
+resources: none
+
+variables:
+  - name: world_name
+    type: text
+    label: World name
+    description: A new world is created with this name when none exists yet.
+    default: World
+    max_length: 64
+  - name: world_size
+    type: choice
+    label: World size
+    description: Only used when the world is created.
+    default: "2"
+    choices:
+      - value: "1"
+        label: Small
+      - value: "2"
+        label: Medium
+      - value: "3"
+        label: Large
+  - name: difficulty
+    type: choice
+    label: World difficulty
+    description: Only used when the world is created.
+    default: "0"
+    choices:
+      - value: "0"
+        label: Classic
+      - value: "1"
+        label: Expert
+      - value: "2"
+        label: Master
+      - value: "3"
+        label: Journey
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 8
+    min: 1
+    max: 255
+    integer: true
+  - name: password
+    type: text
+    label: Server password
+    description: Empty for no password.
+    default: ""
+    max_length: 64
+  - name: motd
+    type: text
+    label: Message of the day
+    default: ""
+    max_length: 200
+
+config_files:
+  - path: serverconfig.txt
+    format: properties
+
+bindings:
+  - file: serverconfig.txt
+    key: world
+    value: "worlds/{{ variables.world_name }}.wld"
+  - file: serverconfig.txt
+    key: worldname
+    variable: world_name
+  - file: serverconfig.txt
+    key: autocreate
+    variable: world_size
+  - file: serverconfig.txt
+    key: difficulty
+    variable: difficulty
+  - file: serverconfig.txt
+    key: maxplayers
+    variable: max_players
+  - file: serverconfig.txt
+    key: password
+    variable: password
+  - file: serverconfig.txt
+    key: motd
+    variable: motd
+
+# The server prints a ": " prompt and waits for a command, so the next line
+# it prints may start with that prompt. Join and leave lines are the player
+# name followed by a fixed text (the server's English texts "{0} has
+# joined." and "{0} has left."). Chat lines start with "<name>", so a player
+# typing "has joined." is not a join. Sample lines:
+# tests/terraria/console.yaml.
+console:
+  ready: '^(?:: )?Server started$'
+  player_join: '^(?:: )?(?P<player>[^<:].*) has joined\.$'
+  player_leave: '^(?:: )?(?P<player>[^<:].*) has left\.$'
+
+# Worlds (with their .bak copies), the ban list and the configuration.
+backup:
+  include:
+    - worlds/
+    - banlist.txt
+    - serverconfig.txt

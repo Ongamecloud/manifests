@@ -1,0 +1,162 @@
+# Factorio headless server, as published by Wube Software on factorio.com.
+# Source: the "Multiplayer" page of the official Factorio wiki (headless
+# server, command-line options, server-settings.json), the download API
+# documented on the "Download API" wiki page, and the example settings files
+# shipped in the archive.
+schema_version: 1
+id: factorio
+name: Factorio
+description: The official Factorio headless server from Wube Software.
+category: custom
+
+terms:
+  label: Factorio Terms of Service
+  url: https://factorio.com/terms-of-service
+
+# Wube publishes the headless server for Linux only.
+platforms:
+  linux: {}
+
+install:
+  # A JSON document with the newest stable and experimental release of each
+  # build: {"stable": {"headless": "2.1.24", ...}, "experimental": {...}}.
+  # The server follows the newest stable release, the one game clients get
+  # by default.
+  - type: resolve_version
+    url: https://factorio.com/api/latest-releases
+  - type: download
+    url: "https://factorio.com/get-download/{{ versions.selected.stable.headless }}/headless/linux64"
+    dest: downloads/factorio-headless.tar.xz
+  # Everything is in a factorio/ folder; the server keeps its data next to
+  # the program, so the saves stay in the server directory.
+  - type: extract
+    archive: downloads/factorio-headless.tar.xz
+    strip_components: 1
+  - type: write_file
+    dest: server-settings.json
+    if_missing: true
+    content: |
+      {
+        "name": "Factorio server",
+        "description": "",
+        "tags": [],
+        "max_players": 0,
+        "visibility": { "public": false, "lan": true },
+        "require_user_verification": true,
+        "game_password": "",
+        "autosave_interval": 10,
+        "autosave_slots": 5,
+        "only_admins_can_pause_the_game": true,
+        "autosave_only_on_server": true
+      }
+  # The server only starts from an existing save, so the first install
+  # creates a new map. Later installs keep the owner's save.
+  - type: run_program
+    executable: bin/x64/factorio
+    arguments:
+      - --create
+      - saves/world.zip
+    unless_exists: saves/world.zip
+
+launch:
+  executable: bin/x64/factorio
+  arguments:
+    - --start-server
+    - saves/world.zip
+    - --server-settings
+    - server-settings.json
+    - --bind
+    - "{{ server.ip }}"
+    - --port
+    - "{{ server.port }}"
+
+# "/quit" saves the map and stops the server.
+stop:
+  command: /quit
+  timeout_seconds: 60
+
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 34197
+      label: Game
+
+resources: none
+
+variables:
+  - name: description
+    type: text
+    label: Description
+    default: ""
+    max_length: 300
+  - name: max_players
+    type: number
+    label: Maximum players
+    description: 0 for no limit.
+    default: 0
+    min: 0
+    max: 65535
+    integer: true
+  - name: password
+    type: text
+    label: Game password
+    description: Empty for no password.
+    default: ""
+    max_length: 64
+  - name: require_user_verification
+    type: boolean
+    label: Only players with a factorio.com account
+    default: true
+  - name: autosave_interval
+    type: number
+    label: Autosave interval (minutes)
+    default: 10
+    min: 1
+    max: 120
+    integer: true
+
+config_files:
+  - path: server-settings.json
+    format: json
+
+bindings:
+  - file: server-settings.json
+    path: [name]
+    value: "{{ server.name }}"
+  - file: server-settings.json
+    path: [description]
+    variable: description
+  - file: server-settings.json
+    path: [max_players]
+    variable: max_players
+  - file: server-settings.json
+    path: [game_password]
+    variable: password
+  - file: server-settings.json
+    path: [require_user_verification]
+    variable: require_user_verification
+  - file: server-settings.json
+    path: [autosave_interval]
+    variable: autosave_interval
+
+# Join and leave lines start with the date, the time and a [JOIN] or
+# [LEAVE] tag; chat lines have a [CHAT] tag instead, so a chat message
+# cannot imitate a join. Sample lines: tests/factorio/console.yaml.
+console:
+  ready: '^ *[0-9.]+ Info ServerMultiplayerManager\.cpp:[0-9]+: .*changing state from\(CreatingGame\) to\(InGame\)$'
+  player_join: '^[0-9-]+ [0-9:]+ \[JOIN\] (?P<player>.+) joined the game$'
+  player_leave: '^[0-9-]+ [0-9:]+ \[LEAVE\] (?P<player>.+) left the game$'
+
+# The saves with their autosaves, the settings, the admin, ban and allow
+# lists, and the program's own configuration. Logs are left out.
+backup:
+  include:
+    - saves/
+    - config/
+    - server-settings.json
+    - server-adminlist.json
+    - server-banlist.json
+    - server-whitelist.json
+  exclude:
+    - saves/*.tmp.zip
