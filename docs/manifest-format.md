@@ -1,0 +1,441 @@
+# Manifest format, schema version 1
+
+This is the reference for every key of a manifest. The machine-readable
+version is [`schema/manifest.schema.json`](../schema/manifest.schema.json);
+[`tools/validate.py`](../tools/validate.py) applies it together with the
+rules a JSON Schema cannot express. [`templates/example.yaml`](../templates/example.yaml)
+uses every section, and [`games/minecraft-java.yaml`](../games/minecraft-java.yaml)
+is a real manifest.
+
+- [General rules](#general-rules)
+- [Probe support](#probe-support)
+- [Identity](#identity)
+- [Platforms](#platforms)
+- [Versions](#versions)
+- [Install steps](#install-steps)
+- [Placeholders](#placeholders)
+- [Runtime](#runtime)
+- [Launch and stop](#launch-and-stop)
+- [Network](#network)
+- [Resources](#resources)
+- [Variables](#variables)
+- [Config files and bindings](#config-files-and-bindings)
+- [Console](#console)
+- [Backup](#backup)
+- [Format changes](#format-changes)
+
+## General rules
+
+- A manifest is one YAML document in `games/<id>.yaml`. It contains data
+  only: no scripts, no shell commands, no expressions.
+- Unknown keys are an error everywhere, so a typo never goes unnoticed. A key
+  written twice in the same mapping is an error too.
+- Write booleans as `true` and `false`. Quote strings that contain `{{ ... }}`,
+  a colon followed by a space, or start with a special character.
+- YAML anchors (`&name` / `*name`) are allowed.
+- Every path is relative to the server directory, written with forward
+  slashes: no leading `/`, no `..`, no backslash, no drive letter or colon,
+  and no Windows reserved name such as `NUL`, `CON` or `COM1`. The same
+  manifest then works on every platform, and nothing can reach outside the
+  server directory.
+
+## Probe support
+
+Schema version 1 is the contract the probe, the API and the apps implement.
+Some sections are already used by the probe today; the others are declared
+now so manifests can be written against a stable format, and the probe
+picks them up in its next releases. A manifest that uses them is valid
+today.
+
+| Section | Used by the probe |
+| --- | --- |
+| `id`, `name`, `platforms`, `install` (all four bricks) | Yes |
+| Placeholders `platform`, `probe.kind`, `server.id`, `server.name`, `server.version`, `resources.memory_mb`, `resources.memory_bytes`, `resources.cpu_millis`, `resources.storage_bytes`, `versions.selected.*`, `variables.*` | Yes |
+| `schema_version`, `category`, shared `install` with platform overrides | Next probe release |
+| `launch`, `stop`, `network` and its placeholders, `variables`, `bindings`, `config_files`, `console` | Next probe releases |
+| `runtime`, `resources` and its placeholders, `backup` | Declared as data; probe support comes later |
+
+`description`, `terms` and `versions` are read by the API and the apps, which
+build the game library and the version list from them.
+
+## Identity
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `schema_version` | yes | Always `1` for this version of the format. |
+| `id` | yes | Lowercase letters, digits and single hyphens, at most 64 characters. Matches the file name. Never changes once published. |
+| `name` | yes | Display name. |
+| `description` | no | One or two sentences for the game library. |
+| `category` | yes | `custom`: installed by the manifest's own steps. `steamcmd`: distributed through SteamCMD. SteamCMD manifests need the `steamcmd` brick, which the probe does not provide yet. |
+| `terms` | no | `label` and `url` (https) of terms the user accepts when creating the server, such as a server license. The apps show the link before the server is created. |
+
+## Platforms
+
+```yaml
+platforms:
+  linux: {}
+  windows:
+    launch:
+      executable: bin/server.exe
+```
+
+One section per supported platform: `linux`, `windows`, `macos`. A missing
+section means the game is **not supported** there; the apps and the website
+show it as unavailable. Only declare a platform on which you have run the
+server.
+
+An empty section (`{}`) uses the shared values. A section may set `install`
+or `launch`; the value replaces the shared key of the same name as a whole
+(lists and mappings are not merged). `install` and `launch` are required
+either at the top level or in every declared platform.
+
+## Versions
+
+```yaml
+versions:
+  source:
+    url: https://example.com/versions.json
+    list: versions
+    latest: latest.stable
+    where:
+      channel: stable
+  default: latest
+  notify_updates: true
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `source` | yes | The JSON document listing versions. `url` (https), `list`, `id`, `latest` and `where` mean the same as in the [`resolve_version`](#resolve_version) step. |
+| `default` | yes | `latest`, or a version id. |
+| `notify_updates` | yes | `true`: a newer version is offered to the user as a pending update. `false`: choosing a version is a deliberate act (for example Minecraft, where worlds and clients follow the version). |
+
+The version the user picks reaches the install steps as
+`{{ server.version }}` (`latest` when they keep the default).
+
+## Install steps
+
+`install` is a list of steps run in order. Each step has a `type` naming a
+**brick** (an operation implemented once in the probe) and that brick's
+parameters. Unknown types and unknown parameters are rejected. If one step
+fails, the install stops there.
+
+String parameters may hold [placeholders](#placeholders), except `format` of
+`extract`. Number parameters cannot.
+
+### `resolve_version`
+
+Fetches a JSON document and picks a version from it.
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `url` | yes | http or https URL of the JSON document. |
+| `list` | no | Dotted path to the array of versions. Without it, the whole document is the selected version. |
+| `select` | with `list` | Version id to pick, or `latest`. Usually `"{{ server.version }}"`. |
+| `id` | no | Field holding each version's id; `id` by default. |
+| `latest` | no | Dotted path to the latest version's id. Without it, `latest` is the first matching entry. |
+| `where` | no | Fields an entry must have, with their exact text values. |
+
+Every scalar field of the picked entry becomes
+`{{ versions.selected.<dotted.path> }}`, and `{{ versions.selected.id }}` is
+always set. A dotted path is keys separated by dots, and a number selects an
+array element (`builds.0.url`). A second `resolve_version` replaces the
+selection: that is how a manifest follows a vendor that publishes one
+document per version (see Minecraft).
+
+### `download`
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `url` | yes | http or https URL. |
+| `dest` | yes | File path. |
+| `checksum` | no | `sha1:<hex>`, `sha256:<hex>` or `sha512:<hex>`. |
+
+The file is moved into place only once complete and verified. Always give a
+checksum when the vendor publishes one.
+
+### `extract`
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `archive` | yes | Archive path, already in the server directory. |
+| `dest` | no | Directory to unpack into; `.` by default. |
+| `format` | no | `zip`, `tar.gz` or `tar.xz`; guessed from the archive name. |
+| `strip_components` | no | Number of leading path elements to drop from every entry. |
+
+Entries that would land outside `dest`, absolute names and special files are
+refused.
+
+### `write_file`
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `dest` | yes | File path. |
+| `content` | no | Text to write. Placeholders are rendered. |
+
+### Missing an operation?
+
+If a game needs something no brick does, do not work around it. Open an
+issue describing the operation; the brick is added to the probe first, then
+to this format.
+
+## Placeholders
+
+`{{ name }}` is replaced by a value. It is plain substitution: no filters,
+conditions or functions, and an unknown name is an error. Placeholders are
+rendered in `install`, `runtime`, `launch`, `stop`, platform sections and the
+`value` of bindings; anywhere else `{{` is an error.
+
+| Name | Value |
+| --- | --- |
+| `platform` | `linux`, `windows` or `macos`. |
+| `probe.kind` | The kind of probe running the server, as told by the API. |
+| `server.id`, `server.name` | Identifier and display name of the server. |
+| `server.version` | The version the user asked for, or `latest`. |
+| `server.ip` | Address the server must bind to. |
+| `server.port` | The first port declared in `network.ports`. |
+| `server.port.<name>` | The port declared with that name. |
+| `resources.memory_max_mb`, `resources.memory_min_mb` | Memory to give the game, in MiB. Only with `resources.memory`; see [Resources](#resources). |
+| `resources.memory_mb`, `resources.memory_bytes` | Memory limit applied to the server process, in MiB and bytes (`0`: no limit). |
+| `resources.cpu_millis` | CPU limit in thousandths of a core (`0`: no limit). |
+| `resources.storage_bytes` | Storage limit in bytes (`0`: no limit). |
+| `versions.selected.<path>` | A field of the version picked by the last `resolve_version`. Kept with the server, so `runtime` and `launch` can use it too. |
+| `variables.<name>` | Current value of a declared variable, as text. |
+
+There is no placeholder for the server directory: every path is already
+relative to it, and the server is launched from it.
+
+## Runtime
+
+```yaml
+runtime:
+  java:
+    version: "{{ versions.selected.javaVersion.majorVersion }}"
+```
+
+Runtimes the server needs. The probe installs them in its own folder, never
+system-wide. Version 1 knows one runtime:
+
+| Key | Meaning |
+| --- | --- |
+| `java.version` | Java major version (an integer such as `21`), or a placeholder that renders to one. |
+
+Leave `runtime` out when the server is a native program.
+
+## Launch and stop
+
+```yaml
+launch:
+  runtime: java
+  arguments: ["-Xmx{{ resources.memory_max_mb }}M", -jar, server.jar, nogui]
+
+stop:
+  command: stop
+  timeout_seconds: 60
+```
+
+| Key | Meaning |
+| --- | --- |
+| `launch.runtime` | Run the main program of a declared runtime (`java`). |
+| `launch.executable` | Or run this file from the server directory. Exactly one of the two. |
+| `launch.arguments` | Arguments, one list item each, passed as they are: no shell, no quoting, no word splitting. |
+| `launch.environment` | Environment variables for the server process. |
+| `stop.command` | Text written to the server console to stop it cleanly. Without it, the probe asks the process to exit. |
+| `stop.timeout_seconds` | Required. After this many seconds the process is terminated. Leave time for the game to save. |
+
+The server always runs from its own directory.
+
+## Network
+
+```yaml
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 7777
+      label: Game
+```
+
+Declare **every** port the game uses, not only the main one: each gets a
+public address through the proxy. A port that the game leaves disabled by
+default is not declared.
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | Lowercase letters, digits and underscores. Becomes `{{ server.port.<name> }}`. |
+| `protocol` | yes | `tcp`, `udp` or `tcp+udp`. |
+| `default` | no | The port the game uses out of the box. The probe uses it when it is free; the server may be given another one, so always pass the port through a placeholder. |
+| `label` | no | Name shown in the apps. |
+
+## Resources
+
+The user sets one memory limit. The operating system enforces it on the
+server process, and the game is told about it, so the two always match.
+
+```yaml
+resources:
+  memory:
+    default_mb: 2048
+    minimum_mb: 1536
+    reserve_mb: 512
+    min_ratio: 0.5
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `memory.default_mb` | yes | Limit used when the user sets none. |
+| `memory.minimum_mb` | yes | Smallest limit the user may set. |
+| `memory.reserve_mb` | no | Part of the limit kept for what the game does not manage itself, such as the Java runtime's own memory. `0` by default. |
+| `memory.min_ratio` | no | Ratio between minimum and maximum memory, from just above 0 to 1. `1` by default. |
+
+With a limit of `L` MiB, `{{ resources.memory_max_mb }}` is `L - reserve_mb`
+and `{{ resources.memory_min_mb }}` is `memory_max_mb × min_ratio`, rounded
+down. Pass them in `launch.arguments` with the unit and syntax the game
+expects (`-Xmx{{ resources.memory_max_mb }}M` for Java).
+
+Write `resources: none` when the game takes no memory parameter. The section
+is required, so this is always a deliberate choice.
+
+## Variables
+
+Settings the user can change. The configuration form in the apps is
+generated from this list; no interface change is needed for a new game.
+
+```yaml
+variables:
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 20
+    min: 1
+    max: 100
+    integer: true
+```
+
+| Key | Types | Meaning |
+| --- | --- | --- |
+| `name` | all | Lowercase letters, digits and underscores. Unique. Becomes `{{ variables.<name> }}`. |
+| `type` | all | `boolean`, `number`, `text` or `choice`. |
+| `label` | all | Field label. |
+| `description` | all | Optional help text. |
+| `default` | all | Required, of the variable's type. For `choice`, one of the values. |
+| `min`, `max` | number | Optional bounds. |
+| `integer` | number | `true` when only whole numbers are accepted. |
+| `max_length` | text | Optional maximum length. |
+| `choices` | choice | List of `value` (text written to the configuration) and `label`. |
+
+A key that does not belong to the type, such as `min` on a text variable, is
+an error.
+
+A variable is written somewhere in one of two ways:
+
+- in a configuration file, with a [binding](#config-files-and-bindings);
+- on the command line, by using `{{ variables.<name> }}` in
+  `launch.arguments`.
+
+## Config files and bindings
+
+```yaml
+config_files:
+  - path: server.properties
+    format: properties
+
+bindings:
+  - file: server.properties
+    key: max-players
+    variable: max_players
+  - file: server.properties
+    key: server-port
+    value: "{{ server.port }}"
+```
+
+`config_files` lists the files the probe reads and writes, with their format:
+`properties`, `json`, `yaml` or `ini`. The probe creates a missing file,
+changes only the keys that are bound, and reads the file back before
+writing, so a change made by hand is kept rather than overwritten.
+
+Each binding writes one value to one place in a declared file:
+
+| Key | Meaning |
+| --- | --- |
+| `file` | A path declared in `config_files`. |
+| `variable` | Write this variable, in its own type (booleans as `true`/`false`). |
+| `value` | Or write this fixed text, which may hold placeholders, such as the port the server was given. |
+| `as` | For a `value` in a JSON or YAML file: write it as `text` (default), `number` or `boolean`. |
+| `key` | Properties and INI files: the key, written exactly as in the file. Dots are part of the key. |
+| `section` | INI files: the section holding the key. Left out, the key is placed before any section. |
+| `path` | JSON and YAML files: the keys from the top of the document down to the value, for example `[server, max_players]`. A number selects an array element. |
+
+Two bindings cannot write the same place.
+
+## Console
+
+```yaml
+console:
+  ready: '^Server started$'
+  player_join: '^(?P<player>\w+) joined$'
+  player_leave: '^(?P<player>\w+) left$'
+```
+
+Regular expressions matched against each line of server output, without its
+line ending. They drive what the apps show: when the server is ready, and
+who is online.
+
+| Key | Meaning |
+| --- | --- |
+| `ready` | The line printed when the server accepts players. |
+| `player_join` | A player joined. Captures the name in a group named `player`. |
+| `player_leave` | A player left. Captures the name in a group named `player`. |
+
+The syntax is [RE2](https://github.com/google/re2/wiki/Syntax), the engine the
+probe uses: no look-ahead or look-behind, no back-references. Write named
+groups as `(?P<player>...)`. Use single quotes in YAML so backslashes stay as
+they are.
+
+Anchor the patterns on something players cannot type, such as the log
+prefix, so a chat message like `<Steve> Alex joined the game` does not
+count as a join.
+
+Every manifest with a `console` section has sample lines in
+`tests/<id>/console.yaml`, copied from real server output:
+
+```yaml
+samples:
+  - line: '[08:10:15] [Server thread/INFO]: Steve joined the game'
+    expect: player_join
+    player: Steve
+  - line: '[08:10:16] [Server thread/INFO]: <Steve> Alex joined the game'
+    expect: none
+```
+
+`expect` is `ready`, `player_join`, `player_leave` or `none`; `player` is the
+name the pattern must capture. The validator checks that each line matches
+exactly the expected pattern, and that every pattern is matched by at least
+one sample.
+
+## Backup
+
+```yaml
+backup:
+  include:
+    - world/
+    - server.properties
+  exclude:
+    - world/session.lock
+```
+
+`include` lists what is worth restoring: worlds, saves, configuration,
+player lists. `exclude` leaves out paths inside them: logs, caches, lock
+files. Files the install downloads again (the server itself, libraries) are
+not needed. When in doubt, include it: a backup must restore a working
+server.
+
+Paths are relative to the server directory. A trailing `/` marks a
+directory, `*` matches within one name and `**` any number of directories.
+
+## Format changes
+
+The probe, the API, the apps and the website all read this format. A change
+that keeps every existing manifest valid (a new optional key, a new brick)
+stays in version 1. A change that would make an existing manifest invalid or
+change its meaning increases `schema_version`, and is discussed in an issue
+first.

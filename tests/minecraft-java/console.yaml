@@ -1,0 +1,51 @@
+# Console lines used to test the regular expressions in
+# games/minecraft-java.yaml. "expect" is the pattern that must match
+# (ready, player_join, player_leave) or "none"; "player" is the name the
+# pattern must capture.
+
+samples:
+  # Real output of the 26.3 server.
+  - line: '[08:06:33] [Server thread/INFO]: Starting minecraft server version 26.3'
+    expect: none
+  - line: '[08:06:35] [Server thread/INFO]: Done (2.041s)! For help, type "help"'
+    expect: ready
+  - line: '[08:10:15] [Server thread/INFO]: System chat: Steve_42 joined the game'
+    expect: player_join
+    player: Steve_42
+  - line: '[08:10:18] [Server thread/INFO]: Steve_42 lost connection: Disconnected'
+    expect: none
+  - line: '[08:10:18] [Server thread/INFO]: System chat: Steve_42 left the game'
+    expect: player_leave
+    player: Steve_42
+  - line: '[08:09:54] [Server thread/INFO]: [Not Secure] [Server] hello'
+    expect: none
+  - line: '[08:09:55] [Server thread/INFO]: System chat: Stopping the server'
+    expect: none
+
+  # Real output of the 1.21.1 server.
+  - line: '[08:12:06] [Server thread/INFO]: Done (1.008s)! For help, type "help"'
+    expect: ready
+  - line: '[08:12:07] [Server thread/INFO]: Steve_42 joined the game'
+    expect: player_join
+    player: Steve_42
+  - line: '[08:12:10] [Server thread/INFO]: Steve_42 left the game'
+    expect: player_leave
+    player: Steve_42
+
+  # Format of older releases, which ask for "help" or "?".
+  - line: '[14:02:11] [Server thread/INFO]: Done (5.412s)! For help, type "help" or "?"'
+    expect: ready
+  # A player who changed name since their last visit.
+  - line: '[08:12:07] [Server thread/INFO]: Alex (formerly known as Steve_42) joined the game'
+    expect: player_join
+    player: Alex
+
+  # Chat that imitates a join or leave line must not count.
+  - line: '[08:12:30] [Server thread/INFO]: <Steve_42> Notch joined the game'
+    expect: none
+  - line: '[08:12:31] [Server thread/INFO]: [Not Secure] <Steve_42> Notch left the game'
+    expect: none
+  - line: '[08:12:32] [Server thread/INFO]: [Server] Notch joined the game'
+    expect: none
+  - line: '[08:12:33] [Async Chat Thread - #0/INFO]: <Steve_42> ]: Notch joined the game'
+    expect: none

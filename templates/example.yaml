@@ -1,117 +1,193 @@
 # EXAMPLE ONLY - this is not a real game.
 #
-# Copy this file to games/<id>.yaml and replace every value. It shows every
-# top-level section of the manifest format. The format is still a first
-# draft: sections marked "draft" will be specified in more detail, and the
-# keys inside them may change before the format is declared stable.
+# Copy this file to games/<id>.yaml and replace every value. It uses every
+# section of the manifest format; remove the ones your game does not need.
+# docs/manifest-format.md explains each key in detail, and
+# games/minecraft-java.yaml is a real manifest to compare with.
 #
-# Values written as {{ ... }} are filled in by the probe when the server
-# starts, for example {{ server.dir }} or {{ variables.max_players }}.
-# See README.md for the full list.
+# Values written as {{ ... }} are filled in by the probe, for example
+# {{ server.port }} or {{ variables.max_players }}. They are plain
+# substitutions: no expressions, no conditions.
 
 # Version of the manifest format this file follows.
-format_version: 1
+schema_version: 1
 
 # Stable identifier. Must match the file name: games/example-game.yaml.
 id: example-game
 name: Example Game
+description: A made-up game that shows every section of a manifest.
 
 # "custom": installed by the steps below.
-# "steamcmd": installed by a single steamcmd step with the Steam app id.
 category: custom
+
+# Optional. Terms the user accepts when creating the server.
+terms:
+  label: Example Game Server License
+  url: https://example.com/server-license
 
 # One section per supported operating system. Leave a platform out when the
 # server does not run there; the game is then shown as unavailable on it.
+# A key set in a platform section ("install" or "launch") replaces the
+# shared one entirely.
 platforms:
-  linux:
-    executable: bin/example-server
+  linux: {}
   windows:
-    executable: bin/example-server.exe
+    launch:
+      executable: bin/example-server.exe
+      arguments:
+        - "--port={{ server.port }}"
+        - "--query-port={{ server.port.query }}"
+        - "--max-memory={{ resources.memory_max_mb }}"
 
-# Draft. Where the version list comes from and which version is the default.
+# The version list offered to the user. The keys mean the same as in the
+# resolve_version step below.
 versions:
-  source: example-release-list
+  source:
+    url: https://example.com/versions.json
+    list: versions
+    latest: latest.stable
+    where:
+      channel: stable
   default: latest
   # A new server version is offered to the user as a pending update.
   notify_updates: true
 
-# Install steps run in order. Each "type" is a brick implemented by the probe;
-# the brick names below are placeholders for illustration.
+# Install steps, run in order. Each "type" is a brick implemented by the
+# probe: resolve_version, download, extract or write_file.
 install:
-  # Set to true only for SteamCMD games that need an account owning the game.
-  requires_owned_game: false
-  steps:
-    - type: download
-      url: "https://example.com/releases/{{ versions.selected.id }}/server-{{ platform }}.zip"
-    - type: extract
-      archive: server.zip
-      destination: "{{ server.dir }}"
+  - type: resolve_version
+    url: https://example.com/versions.json
+    list: versions
+    select: "{{ server.version }}"
+    latest: latest.stable
+    where:
+      channel: stable
+  - type: download
+    url: "https://example.com/releases/{{ versions.selected.id }}/server-{{ platform }}.tar.gz"
+    dest: downloads/server.tar.gz
+    checksum: "sha256:{{ versions.selected.sha256 }}"
+  - type: extract
+    archive: downloads/server.tar.gz
+    # The archive holds everything in one top-level folder; drop it.
+    strip_components: 1
+  - type: write_file
+    dest: config/welcome.txt
+    content: "Welcome to {{ server.name }}!\n"
 
-# Draft. Runtimes the probe installs in its own folder before launch.
-runtime: {}
+# Runtimes the probe installs in its own folder before launch. Leave this
+# section out when the server is a native program.
+# runtime:
+#   java:
+#     version: 21
 
-# Draft. Command line that starts the server.
+# The command line that starts the server, from the server directory.
+# Arguments are passed as they are: no shell, no quoting.
 launch:
+  executable: bin/example-server
   arguments:
     - "--port={{ server.port }}"
     - "--query-port={{ server.port.query }}"
-    - "--max-memory={{ resources.memory_max }}"
+    - "--max-memory={{ resources.memory_max_mb }}"
+  environment:
+    EXAMPLE_HOME: "."
 
-# Draft. How to stop the server cleanly.
+# How to stop the server cleanly before it is terminated.
 stop:
-  console_command: stop
+  command: shutdown
+  timeout_seconds: 30
 
 # Every port the game uses. The first one is also {{ server.port }}.
 network:
   ports:
     - name: game
       protocol: udp
+      default: 7777
+      label: Game
     - name: query
       protocol: udp
+      default: 27015
+      label: Server list
 
-# Draft. Which launch argument receives the memory limit, and in what unit.
+# How the memory limit reaches the game: {{ resources.memory_max_mb }} is
+# passed in a launch argument above. Write "resources: none" when the game
+# takes no such parameter.
 resources:
   memory:
-    unit: megabytes
+    default_mb: 4096
+    minimum_mb: 2048
+    reserve_mb: 256
 
-# Settings shown to the user. The form in the apps is generated from this list.
+# Settings shown to the user. The form in the apps is generated from this
+# list.
 variables:
+  - name: server_name
+    type: text
+    label: Server name
+    default: My Example Server
+    max_length: 64
   - name: max_players
     type: number
     label: Maximum players
     default: 10
     min: 1
     max: 64
-  - name: server_name
-    type: text
-    label: Server name
-    default: "{{ server.name }}"
+    integer: true
+  - name: game_mode
+    type: choice
+    label: Game mode
+    default: coop
+    choices:
+      - value: coop
+        label: Cooperative
+      - value: versus
+        label: Versus
+  - name: pvp
+    type: boolean
+    label: Player versus player
+    default: false
 
-# Draft. Where each variable is written.
-bindings:
-  - variable: max_players
-    file: config/server.ini
-    key: Server.MaxPlayers
-  - variable: server_name
-    file: config/server.ini
-    key: Server.Name
-
-# Draft. Config files the probe can read and write, with their format.
+# Configuration files the probe reads and writes.
 config_files:
   - path: config/server.ini
     format: ini
+  - path: config/settings.json
+    format: json
 
-# Draft. Regular expressions matched against server output.
+# Where values are written. "key" (and "section") for properties and INI
+# files, "path" for JSON and YAML files.
+bindings:
+  - file: config/server.ini
+    section: Server
+    key: Name
+    variable: server_name
+  - file: config/server.ini
+    section: Server
+    key: MaxPlayers
+    variable: max_players
+  - file: config/settings.json
+    path: [rules, mode]
+    variable: game_mode
+  - file: config/settings.json
+    path: [rules, pvp]
+    variable: pvp
+  # A fixed value, here the query port the server was given, written as a
+  # JSON number.
+  - file: config/settings.json
+    path: [network, query_port]
+    value: "{{ server.port.query }}"
+    as: number
+
+# Regular expressions matched against each console line. Sample lines that
+# test them go in tests/<id>/console.yaml.
 console:
   ready: '^Server started on port \d+$'
-  player_join: '^Player (?P<name>.+) joined$'
-  player_leave: '^Player (?P<name>.+) left$'
+  player_join: '^Player (?P<player>.+) joined$'
+  player_leave: '^Player (?P<player>.+) left$'
 
-# What a backup keeps and what it leaves out.
+# What a backup keeps, and what it leaves out.
 backup:
   include:
     - config/
     - saves/
   exclude:
-    - logs/
-    - cache/
+    - saves/**/*.tmp

@@ -18,10 +18,19 @@ The repository is public and open to contributions. See
 
 | Path | What it contains |
 | --- | --- |
-| `games/` | One manifest per game, named `<id>.yaml`. Empty for now. |
-| `schema/manifest.schema.json` | JSON Schema every manifest must pass. |
+| `games/` | One manifest per game, named `<id>.yaml`. |
+| `tests/<id>/console.yaml` | Real server output used to test each game's console patterns. |
+| `schema/manifest.schema.json` | JSON Schema every manifest must pass (schema version 1). |
+| `docs/manifest-format.md` | Reference for every key of the format. |
 | `templates/example.yaml` | A complete, commented example of a fictional game. Start here. |
-| `.github/workflows/validate.yml` | CI that validates every manifest against the schema. |
+| `tools/validate.py` | Validator run locally and in CI. |
+| `.github/workflows/validate.yml` | CI that validates every manifest on each pull request. |
+
+## Games
+
+| Game | File | Linux | Windows | macOS |
+| --- | --- | --- | --- | --- |
+| Minecraft: Java Edition | [`games/minecraft-java.yaml`](games/minecraft-java.yaml) | yes | yes | yes |
 
 ## Manifests contain data, never code
 
@@ -49,63 +58,69 @@ Use the `.yaml` extension, two-space indentation and quote strings that contain
 
 ## Manifest sections
 
+[`docs/manifest-format.md`](docs/manifest-format.md) describes every key.
+
 | Section | Purpose |
 | --- | --- |
-| `format_version` | Version of the manifest format. Currently `1`. |
-| `id`, `name` | Stable identifier (matches the file name) and display name. |
+| `schema_version` | Version of the manifest format. Currently `1`. |
+| `id`, `name`, `description` | Stable identifier (matches the file name), display name, short description. |
 | `category` | `custom` (installed by its own steps) or `steamcmd` (installed through SteamCMD). |
+| `terms` | Optional link to terms the user accepts, such as a server license. |
 | `platforms` | One section per supported OS: `linux`, `windows`, `macos`. A missing platform means unsupported. |
 | `versions` | Where the version list comes from, the default, and `notify_updates`. |
-| `install` | Ordered list of install steps (bricks), and `requires_owned_game` for SteamCMD games that need an owning account. |
+| `install` | Ordered install steps (bricks): `resolve_version`, `download`, `extract`, `write_file`. |
 | `runtime` | Runtimes the game needs, such as a Java version. |
 | `launch`, `stop` | How to start the server and how to stop it cleanly. |
-| `network` | Network binding and every port the game uses. |
-| `resources` | How the game receives its memory and CPU limits, or `none`. |
+| `network` | Every port the game uses. |
+| `resources` | How the game receives its memory limit, or `none`. |
 | `variables` | User settings: name, type (`boolean`, `number`, `text`, `choice`), default, label, bounds. |
-| `bindings` | Where each variable is written: launch argument, properties key, JSON/YAML/INI path. |
-| `config_files` | Config files the probe reads and writes, and their format. |
+| `config_files`, `bindings` | Config files and their format; where each setting is written. |
 | `console` | Regular expressions for server ready, player join and player leave. |
-| `backup` | `include` what is worth restoring, `exclude` logs and caches. |
-
-The schema is a first skeleton: it fixes these top-level sections and checks a
-few key fields. The inside of most sections will be specified in later
-versions. `templates/example.yaml` shows the current shape of each one.
+| `backup` | `include` what is worth restoring, `exclude` logs, caches and lock files. |
 
 ## Built-in values
 
-These can be used in any string with `{{ ... }}`; the probe fills them in.
+These can be used with `{{ ... }}` in install steps, `runtime`, `launch`,
+`stop` and binding values; the probe fills them in. The full table, with
+units, is in [`docs/manifest-format.md`](docs/manifest-format.md#placeholders).
 
 | Value | Meaning |
 | --- | --- |
-| `server.ip` | Address the server binds to. |
-| `server.port` | First declared port. |
-| `server.port.<name>` | Port declared under `network.ports` with that name. |
-| `server.id`, `server.name` | Identifier and display name of the server. |
-| `server.dir` | Folder the server is installed in. |
-| `resources.memory_max`, `resources.memory_min` | Memory limits chosen by the user. |
-| `resources.cpu`, `resources.disk` | CPU and disk limits. |
-| `versions.selected.*` | Fields of the version the user selected. |
-| `variables.<name>` | Current value of a declared variable. |
 | `platform` | `linux`, `windows` or `macos`. |
 | `probe.kind` | Kind of probe running the server. |
+| `server.id`, `server.name` | Identifier and display name of the server. |
+| `server.version` | Version the user asked for, or `latest`. |
+| `server.ip` | Address the server binds to. |
+| `server.port`, `server.port.<name>` | First declared port; port declared with that name. |
+| `resources.memory_max_mb`, `resources.memory_min_mb` | Memory to give the game, from the `resources` section. |
+| `resources.memory_mb`, `resources.cpu_millis`, `resources.storage_bytes` | Limits applied to the server. |
+| `versions.selected.<field>` | Fields of the version picked during install. |
+| `variables.<name>` | Current value of a declared variable. |
 
 ## Validate locally
 
-CI runs the same commands on every pull request. You need Python 3.
+CI runs the same commands on every pull request. You need Python 3.9 or
+newer.
 
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install check-jsonschema==0.29.4
-.venv/bin/check-jsonschema --check-metaschema schema/manifest.schema.json
-find games templates -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
-  | xargs -0 .venv/bin/check-jsonschema --schemafile schema/manifest.schema.json
+.venv/bin/pip install -r tools/requirements.txt
+.venv/bin/python tools/validate.py                         # every manifest
+.venv/bin/python tools/validate.py games/my-game.yaml      # one file
+.venv/bin/python -m unittest discover -s tools             # the validator's own tests
 ```
+
+The validator checks the schema, then what a schema cannot: the file name
+matches the `id`, bindings refer to declared variables and files,
+placeholders use known names, paths stay inside the server directory, and
+console patterns match the sample lines in `tests/<id>/console.yaml`.
 
 ## Format stability
 
-The probe, the apps and the website all read these files, so changing the
-format affects all of them. Changes to the schema are made carefully, and a
-breaking change increases `format_version`.
+The probe, the API, the apps and the website all read these files, so
+changing the format affects all of them. A change that keeps every existing
+manifest valid stays in schema version 1; a breaking change increases
+`schema_version` and is discussed in an issue first.
 
 ## License
 

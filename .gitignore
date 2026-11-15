@@ -9,3 +9,7 @@ Thumbs.db
 # Local tooling used to validate manifests
 .venv/
 node_modules/
+
+# Python bytecode
+__pycache__/
+*.pyc
