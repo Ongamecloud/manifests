@@ -31,6 +31,11 @@ platforms:
         - "{{ variables.public }}"
         - -preset
         - "{{ variables.preset }}"
+        # Crossplay lets Xbox and Microsoft Store players join, through
+        # Microsoft's relay service.
+        - when: crossplay
+          arguments:
+            - -crossplay
         # Keep worlds and player lists in the server directory instead of
         # the user's profile, so they are backed up with the server.
         - -savedir
@@ -58,7 +63,7 @@ stop:
 
 # The game listens on the port given with -port and answers Steam queries
 # on the next port up. The game chooses the query port itself, so it is
-# always the game port + 1.
+# derived: always the game port + 1.
 network:
   ports:
     - name: game
@@ -67,7 +72,8 @@ network:
       label: Game
     - name: query
       protocol: udp
-      default: 2457
+      from: game
+      offset: 1
       label: Steam query
 
 resources: none
@@ -113,6 +119,11 @@ variables:
         label: Immersive
       - value: hammer
         label: Hammer (no raids, free building)
+  - name: crossplay
+    type: boolean
+    label: Crossplay
+    description: Lets players on Xbox and the Microsoft Store join too.
+    default: false
 
 # Lines start with the date and time, for example
 # "11/15/2026 16:02:51: Game server connected".

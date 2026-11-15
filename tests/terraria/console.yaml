@@ -1,0 +1,35 @@
+# Console lines used to test the regular expressions in games/terraria.yaml.
+# "expect" is the pattern that must match (ready, player_join, player_leave)
+# or "none"; "player" is the name the pattern must capture.
+#
+# The ready and other server lines were captured from a run of server
+# version 1458 on Linux. The join and leave lines use the server's own
+# English texts ("{0} has joined." and "{0} has left."): no client joined
+# during that run.
+
+samples:
+  - line: 'Listening on port 7777'
+    expect: none
+  - line: ': Server started'
+    expect: ready
+  - line: 'Server started'
+    expect: ready
+  - line: 'Saving before exit...'
+    expect: none
+  - line: '192.168.1.20:52144 is connecting...'
+    expect: none
+  - line: 'Steve has joined.'
+    expect: player_join
+    player: Steve
+  - line: ': Big Alex has joined.'
+    expect: player_join
+    player: Big Alex
+  - line: 'Steve has joined the red team.'
+    expect: none
+  - line: '<Steve> Alex has joined.'
+    expect: none
+  - line: 'Steve has left.'
+    expect: player_leave
+    player: Steve
+  - line: '<Alex> Steve has left.'
+    expect: none

@@ -41,10 +41,9 @@ install:
 stop:
   timeout_seconds: 90
 
-# serverDZ.cfg, which the owner edits, sets the server name, password,
-# player slots and the Steam query port (steamQueryPort, 2305 in the file
-# shipped with the server). Keep the query port there equal to the one
-# given to the server.
+# serverDZ.cfg sets the Steam query port (steamQueryPort, 2305 in the file
+# shipped with the server). The probe writes the port the server was given
+# there, so the two always match.
 network:
   ports:
     - name: game
@@ -58,8 +57,78 @@ network:
 
 resources: none
 
-# The server settings live in serverDZ.cfg, whose format the probe cannot
-# write yet, so there are no variables: the owner edits the file.
+variables:
+  - name: password
+    type: text
+    label: Server password
+    description: Empty for no password.
+    default: ""
+    max_length: 64
+  - name: admin_password
+    type: text
+    label: Admin password
+    description: Lets a player log in as administrator. Empty disables it.
+    default: ""
+    max_length: 64
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 60
+    min: 1
+    max: 127
+    integer: true
+  - name: map
+    type: choice
+    label: Map
+    description: The mission folder in mpmissions/ the server runs.
+    default: dayzOffline.chernarusplus
+    choices:
+      - value: dayzOffline.chernarusplus
+        label: Chernarus
+      - value: dayzOffline.enoch
+        label: Livonia (players need the DLC)
+  - name: disable_third_person
+    type: boolean
+    label: First-person view only
+    default: false
+  - name: disable_crosshair
+    type: boolean
+    label: Hide the crosshair
+    default: false
+
+# serverDZ.cfg ships with the server. Only the keys below are written; the
+# rest of the file is the owner's.
+config_files:
+  - path: serverDZ.cfg
+    format: bohemia
+
+bindings:
+  - file: serverDZ.cfg
+    key: hostname
+    value: "{{ server.name }}"
+  - file: serverDZ.cfg
+    key: password
+    variable: password
+  - file: serverDZ.cfg
+    key: passwordAdmin
+    variable: admin_password
+  - file: serverDZ.cfg
+    key: maxPlayers
+    variable: max_players
+  - file: serverDZ.cfg
+    key: steamQueryPort
+    value: "{{ server.port.query }}"
+    as: number
+  - file: serverDZ.cfg
+    key: disable3rdPerson
+    variable: disable_third_person
+  - file: serverDZ.cfg
+    key: disableCrosshair
+    variable: disable_crosshair
+  - file: serverDZ.cfg
+    section: Missions.DayZ
+    key: template
+    variable: map
 
 # Player connections are written to the admin log in profiles/, not to the
 # server output, so there are no console patterns.

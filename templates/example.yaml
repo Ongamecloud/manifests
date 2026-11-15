@@ -53,7 +53,8 @@ versions:
   notify_updates: true
 
 # Install steps, run in order. Each "type" is a brick implemented by the
-# probe: resolve_version, download, extract or write_file.
+# probe: resolve_version, download, extract, set_executable, run_program,
+# write_file, or steamcmd for SteamCMD games.
 install:
   - type: resolve_version
     url: https://example.com/versions.json
@@ -70,9 +71,30 @@ install:
     archive: downloads/server.tar.gz
     # The archive holds everything in one top-level folder; drop it.
     strip_components: 1
+    # Only extract this folder of the archive (after strip_components).
+    subfolder: server
+    # The archive ships a default config/server.ini; an update keeps the
+    # owner's copy. "keep_existing: true" would keep every existing file.
+    keep:
+      - config/server.ini
+  # The archive does not keep the execute permission of the program.
+  - type: set_executable
+    paths:
+      - bin/example-server
+  # if_missing: written once, never overwritten by an update.
   - type: write_file
     dest: config/welcome.txt
     content: "Welcome to {{ server.name }}!\n"
+    if_missing: true
+  # Runs a program of the server once, here to create the first world.
+  # unless_exists skips it once that file exists. No shell, no script.
+  - type: run_program
+    executable: bin/example-server
+    arguments:
+      - --create-world
+      - saves/world.dat
+    unless_exists: saves/world.dat
+    timeout_seconds: 300
 
 # Runtimes the probe installs in its own folder before launch. Leave this
 # section out when the server is a native program.
@@ -88,8 +110,16 @@ launch:
     - "--port={{ server.port }}"
     - "--query-port={{ server.port.query }}"
     - "--max-memory={{ resources.memory_max_mb }}"
+    # A group: these arguments are added only when the boolean variable
+    # "pvp" is true ("unless" adds them when it is false).
+    - when: pvp
+      arguments:
+        - --pvp
   environment:
     EXAMPLE_HOME: "."
+  # The directory the server runs in, when it is not the server directory.
+  # "executable" stays relative to the server directory.
+  # working_dir: bin
 
 # How to stop the server cleanly before it is terminated.
 stop:
@@ -103,9 +133,12 @@ network:
       protocol: udp
       default: 7777
       label: Game
+    # A derived port: the game always uses the game port + 1 for it, so it
+    # has an offset instead of a default.
     - name: query
       protocol: udp
-      default: 27015
+      from: game
+      offset: 1
       label: Server list
 
 # How the memory limit reaches the game: {{ resources.memory_max_mb }} is
@@ -146,15 +179,20 @@ variables:
     label: Player versus player
     default: false
 
-# Configuration files the probe reads and writes.
+# Configuration files the probe reads and writes, with their format:
+# properties, ini, json, yaml, toml, cfx (FiveM and RedM server.cfg) or
+# bohemia (DayZ and Arma .cfg).
 config_files:
   - path: config/server.ini
     format: ini
   - path: config/settings.json
     format: json
+  - path: config/rules.toml
+    format: toml
 
-# Where values are written. "key" (and "section") for properties and INI
-# files, "path" for JSON and YAML files.
+# Where values are written. "key" for properties, INI, TOML, cfx and
+# bohemia files ("section" too for INI, TOML and bohemia), "path" for JSON
+# and YAML files.
 bindings:
   - file: config/server.ini
     section: Server
@@ -176,6 +214,10 @@ bindings:
     path: [network, query_port]
     value: "{{ server.port.query }}"
     as: number
+  - file: config/rules.toml
+    section: rules
+    key: max_players
+    variable: max_players
 
 # Regular expressions matched against each console line. Sample lines that
 # test them go in tests/<id>/console.yaml.

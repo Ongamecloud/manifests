@@ -32,10 +32,13 @@ The repository is public and open to contributions. See
 | Game | File | Linux | Windows | macOS |
 | --- | --- | --- | --- | --- |
 | Arma 3 (Steam account that owns the game) | [`games/arma-3.yaml`](games/arma-3.yaml) | yes | yes | no |
+| BeamNG.drive (BeamMP server) | [`games/beamng-drive.yaml`](games/beamng-drive.yaml) | yes | yes | no |
 | DayZ (Steam account that owns the game) | [`games/dayz.yaml`](games/dayz.yaml) | yes | yes | no |
+| Factorio | [`games/factorio.yaml`](games/factorio.yaml) | yes | no | no |
 | Garry's Mod | [`games/garrys-mod.yaml`](games/garrys-mod.yaml) | yes | yes | no |
 | Minecraft: Java Edition | [`games/minecraft-java.yaml`](games/minecraft-java.yaml) | yes | yes | yes |
 | Rust | [`games/rust.yaml`](games/rust.yaml) | yes | yes | no |
+| Terraria | [`games/terraria.yaml`](games/terraria.yaml) | yes | yes | no |
 | Valheim | [`games/valheim.yaml`](games/valheim.yaml) | yes | yes | no |
 
 ## Manifests contain data, never code
@@ -75,13 +78,13 @@ Use the `.yaml` extension, two-space indentation and quote strings that contain
 | `terms` | Optional link to terms the user accepts, such as a server license. |
 | `platforms` | One section per supported OS: `linux`, `windows`, `macos`. A missing platform means unsupported. |
 | `versions` | Where the version list comes from, the default, and `notify_updates`. |
-| `install` | Ordered install steps (bricks): `resolve_version`, `download`, `extract`, `steamcmd`, `write_file`. |
+| `install` | Ordered install steps (bricks): `resolve_version`, `download`, `extract`, `set_executable`, `run_program`, `steamcmd`, `write_file`. |
 | `runtime` | Runtimes the game needs, such as a Java version. |
-| `launch`, `stop` | How to start the server and how to stop it cleanly. |
-| `network` | Every port the game uses. |
+| `launch`, `stop` | How to start the server (program, arguments, arguments added by a boolean setting, working directory) and how to stop it cleanly. |
+| `network` | Every port the game uses, including ports derived from another one (game port + 1). |
 | `resources` | How the game receives its memory limit, or `none`. |
 | `variables` | User settings: name, type (`boolean`, `number`, `text`, `choice`), default, label, bounds. |
-| `config_files`, `bindings` | Config files and their format; where each setting is written. |
+| `config_files`, `bindings` | Config files and their format (properties, INI, JSON, YAML, TOML, FiveM/RedM `server.cfg`, DayZ/Arma `.cfg`); where each setting is written. |
 | `console` | Regular expressions for server ready, player join and player leave. |
 | `backup` | `include` what is worth restoring, `exclude` logs, caches and lock files. |
 

@@ -30,7 +30,9 @@ commit messages and pull requests.
 - **Platforms.** Only declare a platform you have actually run the server on.
   A missing platform is fine: the game is shown as unavailable there. Most
   SteamCMD servers do not run on macOS.
-- **Ports.** Declare every port the game uses, not only the main one.
+- **Ports.** Declare every port the game uses, not only the main one. When
+  the game picks a port itself from the main one (a query port at game
+  port + 1), declare it with `from` and `offset` rather than a default.
 - **Resources.** Pass `{{ resources.memory_max_mb }}` to the launch argument
   that receives the memory limit, in the unit the game expects, so the limit
   the game knows matches the limit the system enforces. Use
@@ -46,6 +48,9 @@ commit messages and pull requests.
 - **Console regexes.** Test them against real server output: the sample lines
   in `tests/<id>/console.yaml` are checked by the validator. Anchor them on
   the log prefix so chat messages cannot imitate a join.
+- **Config files.** Create a default config file with `write_file` and
+  `if_missing: true`, and keep the default files an archive ships with
+  `extract`'s `keep`, so an update never overwrites the owner's edits.
 - **Backup.** Include everything needed to restore the server (configuration,
   saves, worlds). Exclude logs and caches.
 - **Sources.** Download only from official, publicly documented sources for

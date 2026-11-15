@@ -1,0 +1,26 @@
+# Console lines used to test the regular expressions in games/factorio.yaml.
+# "expect" is the pattern that must match (ready, player_join, player_leave)
+# or "none"; "player" is the name the pattern must capture.
+#
+# The ready and other server lines were captured from a run of the
+# headless server 2.1.24 on Linux. The join, leave and chat lines follow the
+# server's log format ("<date> <time> [JOIN] <name> joined the game"): no
+# client joined during that run.
+
+samples:
+  - line: '   0.749 Hosting game at IP ADDR:({0.0.0.0:34197})'
+    expect: none
+  - line: '   2.158 Info ServerMultiplayerManager.cpp:809: updateTick(0) changing state from(CreatingGame) to(InGame)'
+    expect: ready
+  - line: '   6.036 Info ServerMultiplayerManager.cpp:809: updateTick(0) changing state from(InGame) to(DisconnectingScheduled)'
+    expect: none
+  - line: '2026-11-15 21:30:12 [JOIN] Steve joined the game'
+    expect: player_join
+    player: Steve
+  - line: '2026-11-15 21:31:40 [CHAT] Steve: Alex joined the game'
+    expect: none
+  - line: '2026-11-15 21:45:03 [LEAVE] Steve left the game'
+    expect: player_leave
+    player: Steve
+  - line: '2026-11-15 21:45:10 [CHAT] Alex: [LEAVE] Steve left the game'
+    expect: none
