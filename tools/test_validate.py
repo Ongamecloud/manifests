@@ -21,6 +21,9 @@ FACTORIO = ROOT / "games" / "factorio.yaml"
 BEAMNG = ROOT / "games" / "beamng-drive.yaml"
 DAYZ = ROOT / "games" / "dayz.yaml"
 ARMA = ROOT / "games" / "arma-3.yaml"
+BEDROCK = ROOT / "games" / "minecraft-bedrock.yaml"
+FIVEM = ROOT / "games" / "fivem.yaml"
+REDM = ROOT / "games" / "redm.yaml"
 
 
 class ValidateTest(unittest.TestCase):
@@ -242,7 +245,7 @@ class CustomCoreTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.validator = validate.load_validator()
-        cls.files = {p: validate.load_yaml(p) for p in (TERRARIA, FACTORIO, BEAMNG, DAYZ, ARMA, STEAM_GAME, TEMPLATE)}
+        cls.files = {p: validate.load_yaml(p) for p in (TERRARIA, FACTORIO, BEAMNG, DAYZ, ARMA, BEDROCK, FIVEM, REDM, STEAM_GAME, TEMPLATE)}
 
     def errors(self, path, mutate):
         manifest = copy.deepcopy(self.files[path])
@@ -284,6 +287,21 @@ class CustomCoreTest(unittest.TestCase):
         ex = lambda m: m["platforms"]["windows"]["install"][2]
         self.assertRejected(TERRARIA, lambda m: ex(m).update(keep_existing=True), "should not be valid")
         self.assertEqual(self.errors(TERRARIA, lambda m: ex(m).update(keep_existing=False)), [])
+
+    def test_extract_skip_outside_links(self):
+        ex = lambda m: m["platforms"]["linux"]["install"][2]
+        self.assertRejected(FIVEM, lambda m: ex(m).update(skip_outside_links="yes"), "is not of type 'boolean'")
+        self.assertRejected(FIVEM, lambda m: ex(m).update(skip_outside_link=True), "Additional properties")
+        self.assertEqual(self.errors(FIVEM, lambda m: ex(m).update(skip_outside_links=False)), [])
+        self.assertEqual(self.errors(TERRARIA, lambda m: m["platforms"]["windows"]["install"][2].update(skip_outside_links=True)), [])
+
+    def test_cfx_linux_extract_skips_outside_links(self):
+        # The Linux FXServer archive holds absolute links the server never
+        # uses; without the option the probe refuses the whole archive.
+        for path in (FIVEM, REDM):
+            ex = self.files[path]["platforms"]["linux"]["install"][2]
+            self.assertEqual(ex["type"], "extract", path.name)
+            self.assertIs(ex.get("skip_outside_links"), True, path.name)
 
     def test_extract_paths_stay_inside(self):
         ex = lambda m: m["platforms"]["windows"]["install"][2]

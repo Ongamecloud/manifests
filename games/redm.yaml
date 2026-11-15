@@ -1,0 +1,193 @@
+# RedM server (FXServer for Red Dead Redemption 2), as published by Cfx.re.
+# It is the same server program as FiveM, started for the RDR3 game.
+# Source: the "Setting up a server" guides of the Cfx.re documentation
+# (docs.fivem.net), the server version document used by the Cfx.re
+# changelog site, and the run.sh start script shipped in the Linux build.
+schema_version: 1
+id: redm
+name: RedM (Red Dead Redemption 2)
+description: The official RedM server from Cfx.re, for Red Dead Redemption 2 multiplayer.
+category: custom
+
+terms:
+  label: Cfx.re Platform License Agreement
+  url: https://redm.net/terms
+
+# Cfx.re ships Linux and Windows builds. There is no macOS server.
+platforms:
+  linux:
+    install:
+      # One JSON document per platform: {"recommended": "38435",
+      # "recommended_download": ".../fx.tar.xz", "latest": ..., ...}.
+      # The server follows the build Cfx.re recommends.
+      - type: resolve_version
+        url: https://changelogs-live.fivem.net/api/changelog/versions/linux/server
+      - type: download
+        url: "{{ versions.selected.recommended_download }}"
+        dest: downloads/fx.tar.xz
+      # The Linux build is a small Alpine Linux tree (alpine/) holding the
+      # server and its own C library, so it does not depend on the
+      # system's. That tree also holds hundreds of links to absolute paths
+      # (bin/sh -> /bin/busybox, ...) the server never uses; they are
+      # skipped instead of failing the step.
+      - type: extract
+        archive: downloads/fx.tar.xz
+        skip_outside_links: true
+      - &server_data
+        # The default resources (map manager, spawn manager, a basic game
+        # mode and a RedM map) from Cfx.re's server data repository. The
+        # repository is archived, so its last commit is pinned. Files the
+        # owner already has are kept.
+        type: download
+        url: https://github.com/citizenfx/cfx-server-data/archive/c6afa3909c763e3327ed76825e78453286c99f05.zip
+        dest: downloads/cfx-server-data.zip
+      - &server_data_extract
+        type: extract
+        archive: downloads/cfx-server-data.zip
+        strip_components: 1
+        subfolder: resources
+        dest: resources
+        keep_existing: true
+      - &config
+        type: write_file
+        dest: server.cfg
+        if_missing: true
+        content: |
+          # RedM server configuration (see docs.fivem.net, RedM section). The settings of
+          # the server form are written to this file; everything else can
+          # be edited by hand.
+          endpoint_add_tcp "0.0.0.0:30120"
+          endpoint_add_udp "0.0.0.0:30120"
+
+          ensure mapmanager
+          ensure chat
+          ensure spawnmanager
+          ensure basic-gamemode
+          ensure redm-map-one
+
+          # RedM needs OneSync.
+          set onesync on
+
+          sv_scriptHookAllowed 0
+          sets tags "default"
+          sets locale "en-US"
+          sv_hostname "RedM server"
+          sets sv_projectName "RedM server"
+          sets sv_projectDesc ""
+          sv_maxclients 32
+          sv_licenseKey ""
+    launch:
+      # What run.sh does: start the server with the C library of its own
+      # Alpine tree. Paths are relative to the server directory.
+      executable: alpine/opt/cfx-server/ld-musl-x86_64.so.1
+      arguments:
+        - --library-path
+        - alpine/usr/lib/v8/:alpine/lib/:alpine/usr/lib/
+        - --
+        - alpine/opt/cfx-server/FXServer
+        - +set
+        - citizen_dir
+        - alpine/opt/cfx-server/citizen/
+        # The same program runs FiveM and RedM; this selects RedM.
+        - +set
+        - gamename
+        - rdr3
+        - +exec
+        - server.cfg
+  windows:
+    install:
+      - type: resolve_version
+        url: https://changelogs-live.fivem.net/api/changelog/versions/win32/server
+      - type: download
+        url: "{{ versions.selected.recommended_download }}"
+        dest: downloads/server.zip
+      - type: extract
+        archive: downloads/server.zip
+      - *server_data
+      - *server_data_extract
+      - *config
+    launch:
+      executable: FXServer.exe
+      arguments:
+        # The same program runs FiveM and RedM; this selects RedM.
+        - +set
+        - gamename
+        - rdr3
+        - +exec
+        - server.cfg
+
+# "quit" stops the server; the default resources keep no state to save.
+stop:
+  command: quit
+  timeout_seconds: 30
+
+# Players connect over TCP and UDP on the same port.
+network:
+  ports:
+    - name: game
+      protocol: tcp+udp
+      default: 30120
+      label: Game
+
+resources: none
+
+variables:
+  - name: license_key
+    type: text
+    label: License key
+    description: Required. Create a server key on portal.cfx.re; the server does not start without one.
+    default: ""
+    max_length: 100
+  - name: description
+    type: text
+    label: Description
+    description: Shown in the server list.
+    default: ""
+    max_length: 200
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 32
+    min: 1
+    max: 2048
+    integer: true
+
+config_files:
+  - path: server.cfg
+    format: cfx
+
+bindings:
+  - file: server.cfg
+    key: endpoint_add_tcp
+    value: "{{ server.ip }}:{{ server.port }}"
+  - file: server.cfg
+    key: endpoint_add_udp
+    value: "{{ server.ip }}:{{ server.port }}"
+  - file: server.cfg
+    key: sv_hostname
+    value: "{{ server.name }}"
+  - file: server.cfg
+    key: sets sv_projectName
+    value: "{{ server.name }}"
+  - file: server.cfg
+    key: sets sv_projectDesc
+    variable: description
+  - file: server.cfg
+    key: sv_maxclients
+    variable: max_players
+  - file: server.cfg
+    key: sv_licenseKey
+    variable: license_key
+
+# No console patterns yet: the server only starts with a valid license key,
+# so its ready line has not been seen. Its output is also coloured with
+# terminal escape codes, which patterns would have to allow for.
+
+# The configuration and the resources folder (the default resources and
+# any the owner added). The cache folder is rebuilt by the server.
+backup:
+  include:
+    - server.cfg
+    - resources/
+  exclude:
+    - cache/
