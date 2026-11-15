@@ -1,0 +1,121 @@
+# Garry's Mod dedicated server (Source Dedicated Server), as published by
+# Facepunch Studios on Steam (app 4020). Source: the Garry's Mod wiki,
+# "Hosting a Dedicated Server", and the srcds_run script shipped with the
+# Linux server.
+schema_version: 1
+id: garrys-mod
+name: Garry's Mod
+description: The official Garry's Mod dedicated server from Facepunch Studios, installed through SteamCMD.
+category: steamcmd
+
+# Anyone can download the dedicated server; no Steam account is needed.
+steam:
+  login: anonymous
+
+# A Linux and a Windows server are shipped. There is no macOS server. The
+# default Linux server is a 32-bit program, so the system needs the 32-bit
+# C and C++ libraries (the same ones SteamCMD needs).
+platforms:
+  linux:
+    launch:
+      executable: srcds_linux
+      arguments: &arguments
+        - -console
+        - -game
+        - garrysmod
+        # Fail instead of silently moving to another port when the port
+        # is taken, so the port the server uses is always the declared one.
+        - -strictportbind
+        - -ip
+        - "{{ server.ip }}"
+        - -port
+        - "{{ server.port.game }}"
+        - +maxplayers
+        - "{{ variables.max_players }}"
+        - +gamemode
+        - "{{ variables.gamemode }}"
+        - +map
+        - "{{ variables.map }}"
+        - +hostname
+        - "{{ server.name }}"
+        - +sv_password
+        - "{{ variables.password }}"
+      environment:
+        # The engine loads its libraries from the server directory and
+        # bin/, as srcds_run does.
+        LD_LIBRARY_PATH: ".:bin"
+  windows:
+    launch:
+      executable: srcds.exe
+      arguments: *arguments
+
+install:
+  - type: steamcmd
+    app_id: "4020"
+
+stop:
+  command: quit
+  timeout_seconds: 30
+
+# The game port carries players and Steam queries. RCON and SourceTV are
+# off by default, so their ports are not declared.
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 27015
+      label: Game
+
+resources: none
+
+variables:
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 16
+    min: 2
+    max: 128
+    integer: true
+  # Only the game modes shipped with the server. Others come as add-ons.
+  - name: gamemode
+    type: choice
+    label: Game mode
+    default: sandbox
+    choices:
+      - value: sandbox
+        label: Sandbox
+      - value: terrortown
+        label: Trouble in Terrorist Town
+  - name: map
+    type: text
+    label: Map
+    description: Map loaded when the server starts, such as gm_construct or gm_flatgrass.
+    default: gm_construct
+    max_length: 64
+  - name: password
+    type: text
+    label: Server password
+    description: Players must enter it to join. Empty for no password.
+    default: ""
+    max_length: 64
+
+# Source engine console lines:
+#   Client "Name" connected (203.0.113.5:27005).
+#   Dropped Name from server (Disconnect by user.)
+# The engine prints them with no prefix; chat lines start with the
+# speaker's name followed by a colon, so they do not end the same way.
+# The ready line is printed once the map is loaded and the server is
+# connected to Steam.
+# Sample lines: tests/garrys-mod/console.yaml.
+console:
+  ready: '^VAC secure mode is activated\.$'
+  player_join: '^Client "(?P<player>.+)" connected \([0-9a-fA-F.:\[\]]+\)\.$'
+  player_leave: '^Dropped (?P<player>.+) from server \(.*\)$'
+
+# Server settings, the server's SQLite database (sv.db, where add-ons and
+# admin mods keep their data) and the data/ folder.
+backup:
+  include:
+    - garrysmod/cfg/
+    - garrysmod/data/
+    - garrysmod/sv.db

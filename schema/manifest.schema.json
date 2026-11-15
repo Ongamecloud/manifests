@@ -62,6 +62,23 @@
         "steamcmd"
       ]
     },
+    "steam": {
+      "description": "SteamCMD settings. Only allowed with category 'steamcmd'. Without this section the login mode is 'anonymous'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "login"
+      ],
+      "properties": {
+        "login": {
+          "description": "'anonymous': anyone can download the server. 'account': only a Steam account that owns the game can, so the user must log in to Steam on the probe before the server is installed.",
+          "enum": [
+            "anonymous",
+            "account"
+          ]
+        }
+      }
+    },
     "platforms": {
       "description": "One section per supported operating system. A missing platform means the game is not supported there and is shown as unavailable. Only declare a platform you have verified. An empty section ({}) means supported with the shared values.",
       "type": "object",
@@ -196,6 +213,21 @@
           }
         }
       }
+    },
+    {
+      "description": "The steam section belongs to SteamCMD games only.",
+      "if": {
+        "required": [
+          "steam"
+        ]
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "steamcmd"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -320,6 +352,7 @@
             "resolve_version",
             "download",
             "extract",
+            "steamcmd",
             "write_file"
           ]
         }
@@ -359,6 +392,18 @@
           },
           "then": {
             "$ref": "#/$defs/step_extract"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "steamcmd"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_steamcmd"
           }
         },
         {
@@ -487,6 +532,48 @@
           "type": "integer",
           "minimum": 0
         }
+      }
+    },
+    "step_steamcmd": {
+      "description": "Install or update a Steam app with SteamCMD, which the probe keeps in its own directory, apart from any Steam client. Only in a 'steamcmd' manifest. The login mode comes from the top-level 'steam' section. Running the step again updates the app.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "app_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "steamcmd"
+        },
+        "app_id": {
+          "description": "Steam app id of the dedicated server, written as text, for example \"896660\".",
+          "type": "string",
+          "pattern": "^([0-9]|\\{\\{[^}]*\\}\\})+$"
+        },
+        "branch": {
+          "description": "Beta branch to install: letters, digits, '_', '.' and '-'. The default branch when left out.",
+          "type": "string",
+          "pattern": "^([A-Za-z0-9_.-]|\\{\\{[^}]*\\}\\})+$"
+        },
+        "branch_password": {
+          "description": "Password of a beta branch, when the vendor publishes one. Printable text without spaces.",
+          "type": "string",
+          "minLength": 1
+        },
+        "validate": {
+          "description": "true to check every installed file and repair it. A file the user changed is replaced by the original, so leave it out for servers configured by editing their own files.",
+          "type": "boolean"
+        },
+        "dest": {
+          "description": "Directory to install into; '.' by default.",
+          "$ref": "#/$defs/relative_path"
+        }
+      },
+      "dependentRequired": {
+        "branch_password": [
+          "branch"
+        ]
       }
     },
     "step_write_file": {

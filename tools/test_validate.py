@@ -13,6 +13,9 @@ import validate
 ROOT = Path(__file__).resolve().parent.parent
 GAME = ROOT / "games" / "minecraft-java.yaml"
 TEMPLATE = ROOT / "templates" / "example.yaml"
+STEAM_GAME = ROOT / "games" / "valheim.yaml"
+STEAM_ACCOUNT_GAME = ROOT / "games" / "dayz.yaml"
+STEAM_TEMPLATE = ROOT / "templates" / "example-steamcmd.yaml"
 
 
 class ValidateTest(unittest.TestCase):
@@ -137,6 +140,94 @@ class ValidateTest(unittest.TestCase):
 
     def test_console_samples_must_pass(self):
         self.assertRejected(lambda m: m["console"].update(player_leave=r"(?P<player>\S+) left the game$"), "expected none")
+
+
+class SteamTest(unittest.TestCase):
+    """The steam section and the steamcmd step."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.validator = validate.load_validator()
+        cls.game = validate.load_yaml(STEAM_GAME)
+        cls.custom = validate.load_yaml(GAME)
+
+    def errors(self, mutate, base="game", path=STEAM_GAME):
+        manifest = copy.deepcopy(getattr(self, base))
+        mutate(manifest)
+        return validate.validate(self.validator, path, manifest)
+
+    def assertRejected(self, mutate, needle, **kw):
+        errors = self.errors(mutate, **kw)
+        self.assertTrue(any(needle in e for e in errors), f"{needle!r} not in {errors}")
+
+    def test_valid_files(self):
+        self.assertEqual(self.errors(lambda m: None), [])
+        account = validate.load_yaml(STEAM_ACCOUNT_GAME)
+        self.assertEqual(account["steam"]["login"], "account")
+        self.assertEqual(validate.validate(self.validator, STEAM_ACCOUNT_GAME, account), [])
+        template = validate.load_yaml(STEAM_TEMPLATE)
+        self.assertEqual(validate.validate(self.validator, STEAM_TEMPLATE, template), [])
+
+    def test_steam_section_is_optional(self):
+        self.assertEqual(self.errors(lambda m: m.pop("steam")), [])
+
+    def test_unknown_login_mode(self):
+        self.assertRejected(lambda m: m["steam"].update(login="guest"), "is not one of")
+
+    def test_login_is_required_in_steam_section(self):
+        self.assertRejected(lambda m: m["steam"].pop("login"), "'login' is a required property")
+
+    def test_steam_section_needs_steamcmd_category(self):
+        self.assertRejected(lambda m: m.update(steam={"login": "anonymous"}), "'steamcmd' was expected",
+                            base="custom", path=GAME)
+
+    def test_steamcmd_step_needs_steamcmd_category(self):
+        self.assertRejected(lambda m: m["install"].append({"type": "steamcmd", "app_id": "4020"}),
+                            "category must be steamcmd", base="custom", path=GAME)
+
+    def test_steamcmd_manifest_installs_through_steamcmd(self):
+        def mutate(m):
+            m["platforms"]["linux"]["install"] = [{"type": "write_file", "dest": "a.txt"}]
+        self.assertRejected(mutate, "installs through a steamcmd step")
+
+    def test_app_id_is_required(self):
+        self.assertRejected(lambda m: m["install"][0].pop("app_id"), "'app_id' is a required property")
+
+    def test_app_id_is_text(self):
+        self.assertRejected(lambda m: m["install"][0].update(app_id=896660), "is not of type 'string'")
+
+    def test_app_id_is_numeric(self):
+        self.assertRejected(lambda m: m["install"][0].update(app_id="valheim"), "does not match")
+
+    def test_app_id_length(self):
+        self.assertRejected(lambda m: m["install"][0].update(app_id="12345678901"), "1 to 10 digits")
+
+    def test_app_id_placeholder(self):
+        def mutate(m):
+            m["variables"].append({"name": "app", "type": "text", "label": "App", "default": "1"})
+            m["install"][0]["app_id"] = "{{ variables.app }}"
+        self.assertEqual(self.errors(mutate), [])
+
+    def test_branch_name(self):
+        self.assertEqual(self.errors(lambda m: m["install"][0].update(branch="public-test_1.2")), [])
+        self.assertRejected(lambda m: m["install"][0].update(branch="-beta"), "not a branch name")
+        self.assertRejected(lambda m: m["install"][0].update(branch="my beta"), "does not match")
+
+    def test_branch_password_needs_branch(self):
+        self.assertRejected(lambda m: m["install"][0].update(branch_password="letmein"),
+                            "'branch' is a dependency")
+
+    def test_branch_password_text(self):
+        self.assertRejected(lambda m: m["install"][0].update(branch="beta", branch_password="+quit"),
+                            "without spaces")
+        self.assertRejected(lambda m: m["install"][0].update(branch="beta", branch_password="a b"),
+                            "without spaces")
+
+    def test_unknown_steamcmd_parameter(self):
+        self.assertRejected(lambda m: m["install"][0].update(username="me"), "Additional properties")
+
+    def test_dest_stays_inside(self):
+        self.assertRejected(lambda m: m["install"][0].update(dest="../other"), "clean relative path")
 
 
 if __name__ == "__main__":

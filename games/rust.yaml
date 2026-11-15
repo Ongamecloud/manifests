@@ -1,0 +1,139 @@
+# Rust dedicated server, as published by Facepunch Studios on Steam
+# (app 258550). Source: Facepunch's "Creating a server" guide and the
+# runds.sh script shipped with the Linux server.
+schema_version: 1
+id: rust
+name: Rust
+description: The official Rust dedicated server from Facepunch Studios, installed through SteamCMD.
+category: steamcmd
+
+# Anyone can download the dedicated server; no Steam account is needed.
+steam:
+  login: anonymous
+
+# Facepunch ships a Linux and a Windows server. There is no macOS server.
+platforms:
+  linux:
+    launch:
+      executable: RustDedicated
+      arguments: &arguments
+        - -batchmode
+        - -nographics
+        # Every setting is a "+name value" pair, one argument each.
+        - +server.ip
+        - "{{ server.ip }}"
+        - +server.port
+        - "{{ server.port.game }}"
+        - +server.queryport
+        - "{{ server.port.query }}"
+        - +app.port
+        - "{{ server.port.app }}"
+        - +server.hostname
+        - "{{ server.name }}"
+        - +server.description
+        - "{{ variables.description }}"
+        - +server.maxplayers
+        - "{{ variables.max_players }}"
+        - +server.level
+        - Procedural Map
+        - +server.worldsize
+        - "{{ variables.world_size }}"
+        - +server.seed
+        - "{{ variables.seed }}"
+        - +server.pve
+        - "{{ variables.pve }}"
+        # The map, saves and settings are kept in server/main/.
+        - +server.identity
+        - main
+      environment:
+        # The server loads its native libraries from this folder, as the
+        # vendor's runds.sh does.
+        LD_LIBRARY_PATH: ./RustDedicated_Data/Plugins/x86_64
+  windows:
+    launch:
+      executable: RustDedicated.exe
+      arguments: *arguments
+
+install:
+  - type: steamcmd
+    app_id: "258550"
+
+# "quit" saves the world and every player, then exits.
+stop:
+  command: quit
+  timeout_seconds: 120
+
+# RCON is left off (it needs a password set by the owner), so its port is
+# not declared.
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 28015
+      label: Game
+    - name: query
+      protocol: udp
+      default: 28017
+      label: Steam query
+    # Used by the Rust+ companion app.
+    - name: app
+      protocol: tcp
+      default: 28082
+      label: Rust+ companion app
+
+# The server takes no memory parameter. Plan for 8 GiB or more: memory use
+# grows with the map size and the number of players.
+resources: none
+
+variables:
+  - name: description
+    type: text
+    label: Server description
+    description: Shown to players before they join.
+    default: A Rust server
+    max_length: 300
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 50
+    min: 1
+    max: 500
+    integer: true
+  - name: world_size
+    type: number
+    label: Map size
+    description: Width of the procedural map. Larger maps need more memory and take longer to generate.
+    default: 3000
+    min: 1000
+    max: 6000
+    integer: true
+  - name: seed
+    type: number
+    label: Map seed
+    description: The same seed and size always give the same map.
+    default: 12345
+    min: 0
+    max: 2147483647
+    integer: true
+  - name: pve
+    type: boolean
+    label: Player versus environment
+    description: Players cannot damage each other.
+    default: false
+
+# Join and leave lines start with the player's address, Steam id and name:
+# "203.0.113.5:61234/76561198000000000/Name joined [windows/76561198000000000]"
+# "203.0.113.5:61234/76561198000000000/Name disconnecting: closing"
+# Anchoring on the address and Steam id keeps chat lines from matching.
+# Sample lines: tests/rust/console.yaml.
+console:
+  ready: '^Server startup complete$'
+  player_join: '^[0-9a-fA-F.:\[\]]+:[0-9]+/[0-9]{17}/(?P<player>.+) joined \[[a-z]+/[0-9]{17}\]$'
+  player_leave: '^[0-9a-fA-F.:\[\]]+:[0-9]+/[0-9]{17}/(?P<player>.+) disconnecting: '
+
+# Everything the server keeps for its identity: map, world save, player
+# data and the cfg/ folder (users.cfg, server.cfg). The map is generated
+# again from the seed if it is lost, but keeping it makes restores quick.
+backup:
+  include:
+    - server/main/

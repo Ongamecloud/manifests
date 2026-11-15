@@ -1,0 +1,30 @@
+# Console lines used to test the regular expressions in games/rust.yaml.
+# "expect" is the pattern that must match (ready, player_join,
+# player_leave) or "none"; "player" is the name the pattern must capture.
+#
+# The lines follow the dedicated server's console format. They were not
+# captured from a local run; replace them with real output when you test
+# the server.
+
+samples:
+  - line: 'Loading Prefab Bundle '
+    expect: none
+  - line: 'Server startup complete'
+    expect: ready
+  - line: '203.0.113.5:61234/76561198000000000/Steve joined [windows/76561198000000000]'
+    expect: player_join
+    player: Steve
+  - line: '203.0.113.5:61234/76561198000000000/Steve the Builder joined [linux/76561198000000000]'
+    expect: player_join
+    player: Steve the Builder
+  - line: '203.0.113.5:61234/76561198000000000/Steve disconnecting: closing'
+    expect: player_leave
+    player: Steve
+  - line: '203.0.113.5:61234/76561198000000000/Steve the Builder disconnecting: disconnect'
+    expect: player_leave
+    player: Steve the Builder
+  # Chat that imitates a join or leave line must not count.
+  - line: '[CHAT] Steve : 203.0.113.5:1/76561198000000001/Alex joined [windows/76561198000000001]'
+    expect: none
+  - line: 'Saved 41,203 ents, cache(0.12), write(0.03), disk(0.01).'
+    expect: none

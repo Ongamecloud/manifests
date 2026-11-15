@@ -53,6 +53,12 @@ NOT_RE2 = [
     (re.compile(r"[*+?}]\+"), "possessive quantifier"),
 ]
 CONSOLE_KEYS = ("ready", "player_join", "player_leave")
+# Parameters of the steamcmd brick, as the probe checks them. A branch
+# password is passed to SteamCMD as one argument, so it has no spaces and
+# does not start with "+" or "-", which SteamCMD would read as a command.
+STEAM_APP_ID = re.compile(r"^[0-9]{1,10}$")
+STEAM_BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+STEAM_BRANCH_PASSWORD = re.compile(r"^[A-Za-z0-9_.!@#$%^&*=~][!-~]{0,127}$")
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -222,6 +228,7 @@ def check_manifest(path, manifest, errors):
             for key in ("dest", "archive"):
                 if key in step:
                     check_path(f"{where}[{i}].{key}", step[key], errors)
+    check_steam(manifest, step_lists, errors)
     for i, item in enumerate(manifest.get("backup", {}).get("include", [])):
         check_path(f"backup.include[{i}]", item, errors)
     for i, item in enumerate(manifest.get("backup", {}).get("exclude", [])):
@@ -238,6 +245,35 @@ def check_manifest(path, manifest, errors):
             errors.append(f"{where}: runtime {launch['runtime']!r} is not declared in 'runtime'")
 
     check_console(path, manifest, errors)
+
+
+def check_steam(manifest, step_lists, errors):
+    """SteamCMD is used by 'steamcmd' manifests only, and each platform of
+    such a manifest installs through a steamcmd step. The parameter rules
+    are the probe's: each placeholder stands for a plain value, so it is
+    replaced by one before the check."""
+    is_steam = manifest["category"] == "steamcmd"
+    shared = manifest.get("install")
+    for name, section in manifest["platforms"].items():
+        steps = section.get("install", shared) or []
+        uses = any(step["type"] == "steamcmd" for step in steps)
+        if uses and not is_steam:
+            errors.append(f"platforms.{name}: uses a steamcmd step, so category must be steamcmd")
+        if steps and is_steam and not uses:
+            errors.append(f"platforms.{name}: a steamcmd manifest installs through a steamcmd step")
+    for where, steps in step_lists:
+        for i, step in enumerate(steps or []):
+            if step["type"] != "steamcmd":
+                continue
+            at = f"{where}[{i}]"
+            if not STEAM_APP_ID.fullmatch(PLACEHOLDER.sub("1", step["app_id"])):
+                errors.append(f"{at}.app_id: {step['app_id']!r} is not a Steam app id (1 to 10 digits)")
+            if "branch" in step and not STEAM_BRANCH.fullmatch(PLACEHOLDER.sub("x", step["branch"])):
+                errors.append(f"{at}.branch: {step['branch']!r} is not a branch name (letters, digits, _ . -; at most 64)")
+            if "branch_password" in step and not STEAM_BRANCH_PASSWORD.fullmatch(
+                PLACEHOLDER.sub("x", step["branch_password"])
+            ):
+                errors.append(f"{at}.branch_password: printable text without spaces, not starting with + or -")
 
 
 def check_console(path, manifest, errors):

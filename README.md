@@ -23,6 +23,7 @@ The repository is public and open to contributions. See
 | `schema/manifest.schema.json` | JSON Schema every manifest must pass (schema version 1). |
 | `docs/manifest-format.md` | Reference for every key of the format. |
 | `templates/example.yaml` | A complete, commented example of a fictional game. Start here. |
+| `templates/example-steamcmd.yaml` | The same for a game installed through SteamCMD. |
 | `tools/validate.py` | Validator run locally and in CI. |
 | `.github/workflows/validate.yml` | CI that validates every manifest on each pull request. |
 
@@ -30,7 +31,12 @@ The repository is public and open to contributions. See
 
 | Game | File | Linux | Windows | macOS |
 | --- | --- | --- | --- | --- |
+| Arma 3 (Steam account that owns the game) | [`games/arma-3.yaml`](games/arma-3.yaml) | yes | yes | no |
+| DayZ (Steam account that owns the game) | [`games/dayz.yaml`](games/dayz.yaml) | yes | yes | no |
+| Garry's Mod | [`games/garrys-mod.yaml`](games/garrys-mod.yaml) | yes | yes | no |
 | Minecraft: Java Edition | [`games/minecraft-java.yaml`](games/minecraft-java.yaml) | yes | yes | yes |
+| Rust | [`games/rust.yaml`](games/rust.yaml) | yes | yes | no |
+| Valheim | [`games/valheim.yaml`](games/valheim.yaml) | yes | yes | no |
 
 ## Manifests contain data, never code
 
@@ -65,10 +71,11 @@ Use the `.yaml` extension, two-space indentation and quote strings that contain
 | `schema_version` | Version of the manifest format. Currently `1`. |
 | `id`, `name`, `description` | Stable identifier (matches the file name), display name, short description. |
 | `category` | `custom` (installed by its own steps) or `steamcmd` (installed through SteamCMD). |
+| `steam` | SteamCMD games only: whether the server downloads anonymously or needs a Steam account that owns the game. |
 | `terms` | Optional link to terms the user accepts, such as a server license. |
 | `platforms` | One section per supported OS: `linux`, `windows`, `macos`. A missing platform means unsupported. |
 | `versions` | Where the version list comes from, the default, and `notify_updates`. |
-| `install` | Ordered install steps (bricks): `resolve_version`, `download`, `extract`, `write_file`. |
+| `install` | Ordered install steps (bricks): `resolve_version`, `download`, `extract`, `steamcmd`, `write_file`. |
 | `runtime` | Runtimes the game needs, such as a Java version. |
 | `launch`, `stop` | How to start the server and how to stop it cleanly. |
 | `network` | Every port the game uses. |

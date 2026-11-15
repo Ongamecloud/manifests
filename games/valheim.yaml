@@ -1,0 +1,130 @@
+# Valheim dedicated server, as published by Iron Gate on Steam (app 896660).
+# Source: the "Valheim Dedicated Server Manual" shipped with the server, and
+# the start_server.sh / start_headless_server.bat scripts next to it.
+schema_version: 1
+id: valheim
+name: Valheim
+description: The official Valheim dedicated server from Iron Gate, installed through SteamCMD.
+category: steamcmd
+
+# Anyone can download the dedicated server; no Steam account is needed.
+steam:
+  login: anonymous
+
+# Iron Gate ships a Linux and a Windows server. There is no macOS server.
+platforms:
+  linux:
+    launch:
+      executable: valheim_server.x86_64
+      arguments: &arguments
+        - -nographics
+        - -batchmode
+        - -name
+        - "{{ server.name }}"
+        - -port
+        - "{{ server.port.game }}"
+        - -world
+        - "{{ variables.world }}"
+        - -password
+        - "{{ variables.password }}"
+        - -public
+        - "{{ variables.public }}"
+        - -preset
+        - "{{ variables.preset }}"
+        # Keep worlds and player lists in the server directory instead of
+        # the user's profile, so they are backed up with the server.
+        - -savedir
+        - saves
+      environment:
+        # The server loads its Steam libraries from linux64/, as the
+        # vendor's start_server.sh does.
+        LD_LIBRARY_PATH: ./linux64
+        SteamAppId: "892970"
+  windows:
+    launch:
+      executable: valheim_server.exe
+      arguments: *arguments
+      environment:
+        SteamAppId: "892970"
+
+install:
+  - type: steamcmd
+    app_id: "896660"
+
+# The server saves the world and exits when it is asked to stop (Ctrl+C);
+# it reads no console commands. Saving a large world takes a moment.
+stop:
+  timeout_seconds: 60
+
+# The game listens on the port given with -port and answers Steam queries
+# on the next port up. The game chooses the query port itself, so it is
+# always the game port + 1.
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 2456
+      label: Game
+    - name: query
+      protocol: udp
+      default: 2457
+      label: Steam query
+
+resources: none
+
+variables:
+  - name: world
+    type: text
+    label: World name
+    description: Name of the world file. A new world is created when none has this name.
+    default: Dedicated
+    max_length: 64
+  - name: password
+    type: text
+    label: Server password
+    description: Needed for a listed server, at least 5 characters and not part of the server name. Empty for no password.
+    default: ""
+    max_length: 64
+  - name: public
+    type: choice
+    label: Server list
+    default: "0"
+    choices:
+      - value: "0"
+        label: Hidden, join by address
+      - value: "1"
+        label: Listed in the community server list
+  - name: preset
+    type: choice
+    label: World difficulty
+    default: normal
+    choices:
+      - value: normal
+        label: Normal
+      - value: casual
+        label: Casual
+      - value: easy
+        label: Easy
+      - value: hard
+        label: Hard
+      - value: hardcore
+        label: Hardcore
+      - value: immersive
+        label: Immersive
+      - value: hammer
+        label: Hammer (no raids, free building)
+
+# Lines start with the date and time, for example
+# "11/15/2026 16:02:51: Game server connected".
+# There are no player patterns: the server logs no player name when someone
+# leaves, and logs a "join" line again each time a character respawns, so
+# the online list could not be kept right.
+# Sample lines: tests/valheim/console.yaml.
+console:
+  ready: '^[0-9./-]+ [0-9:]+: Game server connected$'
+
+# Worlds (with the game's own rotating backups) and the admin, ban and
+# permitted lists all live under saves/.
+backup:
+  include:
+    - saves/

@@ -1,0 +1,91 @@
+# EXAMPLE ONLY - this is not a real game.
+#
+# Start from this file for a game whose dedicated server is distributed
+# through SteamCMD. Copy it to games/<id>.yaml and replace every value.
+# Sections that are the same for every game (variables, bindings, console,
+# backup...) are explained in templates/example.yaml and
+# docs/manifest-format.md; games/valheim.yaml and games/dayz.yaml are real
+# SteamCMD manifests to compare with.
+
+schema_version: 1
+id: example-steam-game
+name: Example Steam Game
+description: A made-up game that shows the parts of a SteamCMD manifest.
+
+# "steamcmd": installed through SteamCMD, by the steamcmd step below.
+category: steamcmd
+
+# Optional. "anonymous" (the default when this section is left out): anyone
+# can download the server. "account": only a Steam account that owns the
+# game can, as for DayZ or Arma 3. The apps then ask the user to log in to
+# Steam on the probe before the server is created.
+steam:
+  login: anonymous
+
+# Most SteamCMD servers have a Linux and a Windows build, and none for
+# macOS. Only declare the platforms the server really runs on. The program
+# to start usually differs per platform.
+platforms:
+  linux:
+    launch:
+      executable: ExampleServer.x86_64
+      # Written once here and reused below with *arguments.
+      arguments: &arguments
+        - "-port={{ server.port.game }}"
+        - "-queryport={{ server.port.query }}"
+        - "-name={{ server.name }}"
+        - "-maxplayers={{ variables.max_players }}"
+      environment:
+        # Many Linux servers load their libraries from a folder next to the
+        # program, as the vendor's start script does.
+        LD_LIBRARY_PATH: ./linux64
+  windows:
+    launch:
+      executable: ExampleServer.exe
+      arguments: *arguments
+
+# A SteamCMD manifest installs through one steamcmd step on every platform.
+# Running it again updates the server.
+install:
+  - type: steamcmd
+    # The Steam app id of the dedicated server (not of the game), as text.
+    app_id: "1000000"
+    # Optional: a public beta branch, and its password when the vendor
+    # publishes one.
+    branch: public-beta
+    # Optional: check every file and repair it. Leave it out when the owner
+    # configures the server by editing files it ships with: validating puts
+    # the originals back.
+    validate: true
+    # Optional: directory to install into, "." by default.
+    dest: .
+
+stop:
+  command: quit
+  timeout_seconds: 60
+
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 27015
+      label: Game
+    - name: query
+      protocol: udp
+      default: 27016
+      label: Steam query
+
+resources: none
+
+variables:
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 16
+    min: 1
+    max: 64
+    integer: true
+
+backup:
+  include:
+    - saves/
