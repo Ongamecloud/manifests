@@ -38,10 +38,11 @@ commit messages and pull requests.
 - **Versions.** Set `notify_updates: true` when a new server version should be
   offered as an update. Set it to `false` only when choosing a version is a
   deliberate choice for players.
-- **SteamCMD games.** They will use a single `steamcmd` install step with the
-  app id, and declare when the server can only be downloaded by an account
-  that owns the game. The probe does not provide the `steamcmd` brick yet,
-  so SteamCMD manifests cannot be submitted until it does.
+- **SteamCMD games.** Start from `templates/example-steamcmd.yaml`. They
+  use `category: steamcmd` and a single `steamcmd` install step with the
+  dedicated server's app id. When only an account that owns the game can
+  download the server, write `steam: { login: account }`, so the apps can
+  tell the user before the server is created.
 - **Console regexes.** Test them against real server output: the sample lines
   in `tests/<id>/console.yaml` are checked by the validator. Anchor them on
   the log prefix so chat messages cannot imitate a join.

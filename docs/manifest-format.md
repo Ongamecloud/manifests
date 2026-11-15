@@ -13,6 +13,7 @@ is a real manifest.
 - [Platforms](#platforms)
 - [Versions](#versions)
 - [Install steps](#install-steps)
+- [SteamCMD games](#steamcmd-games)
 - [Placeholders](#placeholders)
 - [Runtime](#runtime)
 - [Launch and stop](#launch-and-stop)
@@ -49,7 +50,8 @@ today.
 
 | Section | Used by the probe |
 | --- | --- |
-| `id`, `name`, `platforms`, `install` (all four bricks) | Yes |
+| `id`, `name`, `platforms`, `install` (all five bricks) | Yes |
+| `steam` and the `steamcmd` brick | Yes |
 | Placeholders `platform`, `probe.kind`, `server.id`, `server.name`, `server.version`, `resources.memory_mb`, `resources.memory_bytes`, `resources.cpu_millis`, `resources.storage_bytes`, `versions.selected.*`, `variables.*` | Yes |
 | `schema_version`, `category`, shared `install` with platform overrides | Next probe release |
 | `launch`, `stop`, `network` and its placeholders, `variables`, `bindings`, `config_files`, `console` | Next probe releases |
@@ -66,7 +68,8 @@ build the game library and the version list from them.
 | `id` | yes | Lowercase letters, digits and single hyphens, at most 64 characters. Matches the file name. Never changes once published. |
 | `name` | yes | Display name. |
 | `description` | no | One or two sentences for the game library. |
-| `category` | yes | `custom`: installed by the manifest's own steps. `steamcmd`: distributed through SteamCMD. SteamCMD manifests need the `steamcmd` brick, which the probe does not provide yet. |
+| `category` | yes | `custom`: installed by the manifest's own steps. `steamcmd`: distributed through SteamCMD and installed by a [`steamcmd`](#steamcmd) step. |
+| `steam` | no | SteamCMD settings, only with `category: steamcmd`. See [SteamCMD games](#steamcmd-games). |
 | `terms` | no | `label` and `url` (https) of terms the user accepts when creating the server, such as a server license. The apps show the link before the server is created. |
 
 ## Platforms
@@ -165,6 +168,24 @@ checksum when the vendor publishes one.
 Entries that would land outside `dest`, absolute names and special files are
 refused.
 
+### `steamcmd`
+
+Installs or updates a Steam app with SteamCMD. Only allowed in a
+`category: steamcmd` manifest; see [SteamCMD games](#steamcmd-games).
+
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `app_id` | yes | Steam app id of the dedicated server, written as text (`"896660"`). 1 to 10 digits. |
+| `branch` | no | Beta branch: letters, digits, `_`, `.` and `-`, at most 64 characters. The default branch when left out. |
+| `branch_password` | with `branch` | Password of a beta branch, when the vendor publishes one. Printable text without spaces, not starting with `+` or `-`. |
+| `validate` | no | `true` to check every installed file and repair it. |
+| `dest` | no | Directory to install into; `.` by default. |
+
+Running the step again updates the app; SteamCMD only downloads what
+changed. `validate` also puts back any file the server ships with that the
+owner changed, such as a default config file, so leave it out for servers
+configured by editing their own files.
+
 ### `write_file`
 
 | Parameter | Required | Meaning |
@@ -177,6 +198,37 @@ refused.
 If a game needs something no brick does, do not work around it. Open an
 issue describing the operation; the brick is added to the probe first, then
 to this format.
+
+## SteamCMD games
+
+Many dedicated servers are distributed through Steam. Their manifest has
+`category: steamcmd` and installs through one [`steamcmd`](#steamcmd) step
+on every platform:
+
+```yaml
+category: steamcmd
+steam:
+  login: anonymous
+install:
+  - type: steamcmd
+    app_id: "896660"
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `steam.login` | with `steam` | `anonymous`: anyone can download the server. `account`: only a Steam account that owns the game can (DayZ and Arma 3, for example). Without a `steam` section the mode is `anonymous`. |
+
+The login mode is part of the manifest, not of the step, so the apps can
+tell before anything is installed that the user must log in to Steam on the
+probe and own the game. The probe runs SteamCMD from its own directory and
+never touches a Steam client installed on the same machine.
+
+The validator also checks that a `steamcmd` step only appears in a
+`category: steamcmd` manifest, and that every platform of such a manifest
+installs through one. Most SteamCMD servers have no macOS build: leave
+`macos` out unless the server really runs there.
+[`templates/example-steamcmd.yaml`](../templates/example-steamcmd.yaml) is
+a commented starting point.
 
 ## Placeholders
 

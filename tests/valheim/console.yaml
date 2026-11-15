@@ -1,0 +1,19 @@
+# Console lines used to test the regular expressions in games/valheim.yaml.
+# "expect" is the pattern that must match (ready) or "none".
+#
+# The lines follow the dedicated server's log format (date, time, message).
+# They were not captured from a local run; replace them with real output
+# when you test the server.
+
+samples:
+  - line: '11/15/2026 16:02:40: Load world: Dedicated (Dedicated)'
+    expect: none
+  - line: '11/15/2026 16:02:51: Game server connected'
+    expect: ready
+  - line: '11/15/2026 16:05:12: Got character ZDOID from Ragnar : -1394853219:1'
+    expect: none
+  # Some systems write the date with dots.
+  - line: '15.11.2026 16:02:51: Game server connected'
+    expect: ready
+  - line: '11/15/2026 16:30:02: Closing socket 76561198000000000'
+    expect: none

@@ -1,0 +1,29 @@
+# Console lines used to test the regular expressions in
+# games/garrys-mod.yaml. "expect" is the pattern that must match (ready,
+# player_join, player_leave) or "none"; "player" is the name the pattern
+# must capture.
+#
+# The lines follow the Source Dedicated Server console format. They were
+# not captured from a local run; replace them with real output when you
+# test the server.
+
+samples:
+  - line: 'Connection to Steam servers successful.'
+    expect: none
+  - line: 'VAC secure mode is activated.'
+    expect: ready
+  - line: 'Client "Gordon" connected (203.0.113.5:27005).'
+    expect: player_join
+    player: Gordon
+  - line: 'Client "Dr. Kleiner (lab)" connected (203.0.113.6:27005).'
+    expect: player_join
+    player: Dr. Kleiner (lab)
+  - line: 'Dropped Gordon from server (Disconnect by user.)'
+    expect: player_leave
+    player: Gordon
+  - line: 'Dropped Dr. Kleiner (lab) from server (timed out)'
+    expect: player_leave
+    player: Dr. Kleiner (lab)
+  # Chat must not count.
+  - line: 'Gordon: Client "Alyx" connected (203.0.113.7:27005).'
+    expect: none

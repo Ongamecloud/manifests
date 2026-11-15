@@ -1,0 +1,81 @@
+# DayZ dedicated server, as published by Bohemia Interactive on Steam
+# (app 223350). Source: Bohemia's "DayZ Server Configuration" and "Hosting
+# a Linux Server" pages on the Bohemia Interactive Community wiki.
+schema_version: 1
+id: dayz
+name: DayZ
+description: The official DayZ dedicated server from Bohemia Interactive, installed through SteamCMD.
+category: steamcmd
+
+# Only a Steam account that owns DayZ can download the server. The user
+# logs in to Steam on the probe before the server is installed.
+steam:
+  login: account
+
+# Bohemia ships a Linux and a Windows server. There is no macOS server.
+platforms:
+  linux:
+    launch:
+      executable: DayZServer
+      arguments: &arguments
+        - -config=serverDZ.cfg
+        - "-port={{ server.port.game }}"
+        # Logs, crash dumps and the BattlEye settings go to profiles/.
+        - -profiles=profiles
+        - -dologs
+        - -adminlog
+        - -freezecheck
+  windows:
+    launch:
+      executable: DayZServer_x64.exe
+      arguments: *arguments
+
+# No "validate": it would put back the original serverDZ.cfg and mission
+# files over the ones the owner edited.
+install:
+  - type: steamcmd
+    app_id: "223350"
+
+# The server reads no console commands, so the probe asks the process to
+# exit. Persistence is saved regularly while it runs.
+stop:
+  timeout_seconds: 90
+
+# serverDZ.cfg, which the owner edits, sets the server name, password,
+# player slots and the Steam query port (steamQueryPort, 2305 in the file
+# shipped with the server). Keep the query port there equal to the one
+# given to the server.
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 2302
+      label: Game
+    - name: query
+      protocol: udp
+      default: 2305
+      label: Steam query
+
+resources: none
+
+# The server settings live in serverDZ.cfg, whose format the probe cannot
+# write yet, so there are no variables: the owner edits the file.
+
+# Player connections are written to the admin log in profiles/, not to the
+# server output, so there are no console patterns.
+
+# The configuration, the mission folders (with the world's persistence in
+# storage_*/), the ban and allow lists, and the BattlEye settings. Logs and
+# crash dumps are left out.
+backup:
+  include:
+    - serverDZ.cfg
+    - mpmissions/
+    - profiles/
+    - ban.txt
+    - whitelist.txt
+  exclude:
+    - profiles/*.RPT
+    - profiles/*.ADM
+    - profiles/*.log
+    - profiles/*.mdmp

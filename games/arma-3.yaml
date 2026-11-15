@@ -1,0 +1,84 @@
+# Arma 3 dedicated server, as published by Bohemia Interactive on Steam
+# (app 233780). Source: Bohemia's "Arma 3: Dedicated Server" and "Arma 3:
+# Startup Parameters" pages on the Bohemia Interactive Community wiki.
+schema_version: 1
+id: arma-3
+name: Arma 3
+description: The official Arma 3 dedicated server from Bohemia Interactive, installed through SteamCMD.
+category: steamcmd
+
+# Only a Steam account that owns Arma 3 can download the server. The user
+# logs in to Steam on the probe before the server is installed.
+steam:
+  login: account
+
+# Bohemia ships a Linux and a Windows server. There is no macOS server.
+platforms:
+  linux:
+    launch:
+      executable: arma3server_x64
+      arguments: &arguments
+        - "-port={{ server.port.game }}"
+        # The profile (difficulty settings, logs) is kept in profiles/.
+        - -name=server
+        - -profiles=profiles
+        # Start without loading a terrain until a mission is chosen.
+        - -world=empty
+  windows:
+    launch:
+      executable: arma3server_x64.exe
+      arguments: *arguments
+
+install:
+  - type: steamcmd
+    app_id: "233780"
+
+# The server reads no console commands, so the probe asks the process to
+# exit.
+stop:
+  timeout_seconds: 30
+
+# The game takes one port with -port and uses the next ones itself: Steam
+# query on port + 1, Steam on port + 2 and BattlEye on port + 4 (port + 3 is
+# reserved). They always follow the game port.
+network:
+  ports:
+    - name: game
+      protocol: udp
+      default: 2302
+      label: Game
+    - name: query
+      protocol: udp
+      default: 2303
+      label: Steam query
+    - name: steam
+      protocol: udp
+      default: 2304
+      label: Steam
+    - name: battleye
+      protocol: udp
+      default: 2306
+      label: BattlEye
+
+resources: none
+
+# The server settings (name, password, missions) live in a server.cfg file
+# passed with -config. The probe cannot write that format yet, and the
+# server needs the file to exist, so the server starts with the game's
+# defaults and there are no variables.
+
+# Player connections are written to the log in profiles/, not reliably to
+# the server output, so there are no console patterns.
+
+# The profile with its difficulty settings and saved missions, and the
+# missions folder (missions uploaded by the owner). Logs and crash dumps are
+# left out.
+backup:
+  include:
+    - profiles/
+    - mpmissions/
+  exclude:
+    - profiles/*.rpt
+    - profiles/*.log
+    - profiles/*.mdmp
+    - profiles/*.bidmp
