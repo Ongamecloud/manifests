@@ -1,22 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Ongamecloud/manifests/main/schema/manifest.schema.json",
-  "title": "Game manifest",
-  "description": "Declarative description of how one game server is installed, launched and configured. Data only: install steps name bricks implemented by the probe, never scripts. This is a first skeleton: it fixes the top-level sections, and each section will be specified in detail in later versions of the format.",
+  "title": "Game manifest, schema version 1",
+  "description": "Declarative description of how one game server is installed, launched and configured. Data only: install steps name bricks implemented by the probe, never scripts. docs/manifest-format.md is the full reference; tools/validate.py runs this schema plus the checks a JSON Schema cannot express.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "format_version",
+    "schema_version",
     "id",
     "name",
     "category",
     "platforms",
-    "install",
-    "launch"
+    "resources"
   ],
   "properties": {
-    "format_version": {
-      "description": "Version of the manifest format this file is written against. Lets tools reject a file written for a format they do not understand.",
+    "schema_version": {
+      "description": "Version of the manifest format this file is written against. A tool rejects a file written for a version it does not know.",
       "const": 1
     },
     "id": {
@@ -31,15 +30,40 @@
       "minLength": 1,
       "maxLength": 100
     },
+    "description": {
+      "description": "One or two sentences shown in the game library.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "terms": {
+      "description": "Terms published by the game vendor that the user accepts when creating the server, for example an end user license agreement. The interfaces show the link before the server is created.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "url"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "url": {
+          "$ref": "#/$defs/https_url"
+        }
+      }
+    },
     "category": {
-      "description": "'steamcmd' when the dedicated server is distributed through SteamCMD; 'custom' when installation and version management are handled by the manifest's own steps.",
+      "description": "'custom' when installation and version management are handled by the manifest's own steps. 'steamcmd' when the dedicated server is distributed through SteamCMD; such manifests need the steamcmd brick, which the probe does not provide yet.",
       "enum": [
         "custom",
         "steamcmd"
       ]
     },
     "platforms": {
-      "description": "One section per supported operating system. A missing platform means the game is not supported there and is shown as unavailable. Only declare a platform you have verified.",
+      "description": "One section per supported operating system. A missing platform means the game is not supported there and is shown as unavailable. Only declare a platform you have verified. An empty section ({}) means supported with the shared values.",
       "type": "object",
       "minProperties": 1,
       "additionalProperties": false,
@@ -56,69 +80,83 @@
       }
     },
     "versions": {
-      "description": "How the list of versions offered to the user is obtained, which one is the default, and whether a newer version is reported as a pending update.",
-      "type": "object",
-      "properties": {
-        "notify_updates": {
-          "description": "true when a new server version should be offered as a pending update; false when choosing a version is a deliberate act by the user.",
-          "type": "boolean"
-        }
-      }
+      "$ref": "#/$defs/versions"
     },
     "install": {
-      "description": "Ordered install steps, plus install-level requirements such as an owning Steam account.",
-      "type": "object",
-      "required": [
-        "steps"
-      ],
-      "properties": {
-        "requires_owned_game": {
-          "description": "true when the dedicated server can only be downloaded by a Steam account that owns the game.",
-          "type": "boolean"
-        },
-        "steps": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/step"
-          }
-        }
-      }
+      "description": "Install steps shared by every platform, run in order. A platform section may replace them with its own 'install'.",
+      "$ref": "#/$defs/steps"
     },
     "runtime": {
-      "description": "Runtimes the game needs (for example a Java version), installed by the probe in its own folder.",
-      "type": "object"
+      "$ref": "#/$defs/runtime"
     },
     "launch": {
-      "description": "Command that starts the server. Shared by all platforms; a platform section may override parts of it.",
-      "type": "object"
+      "description": "How the server process is started, shared by every platform. A platform section may replace it with its own 'launch'.",
+      "$ref": "#/$defs/launch"
     },
     "stop": {
-      "description": "How to stop the server cleanly, for example a console command, before the process is terminated.",
-      "type": "object"
+      "$ref": "#/$defs/stop"
     },
     "network": {
-      "description": "Network binding and every port the game uses. Each port named here becomes {{ server.port.<name> }}; the first one is also {{ server.port }}.",
-      "type": "object",
-      "properties": {
-        "ports": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "name",
-              "protocol"
-            ],
+      "$ref": "#/$defs/network"
+    },
+    "resources": {
+      "$ref": "#/$defs/resources"
+    },
+    "variables": {
+      "description": "Settings the user can change. Declared once here; where each one is written is declared in 'bindings' or by using {{ variables.<name> }} in 'launch'. The configuration form in the apps is generated from this list.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variable"
+      }
+    },
+    "bindings": {
+      "description": "Where values are written in configuration files: a user variable, or a fixed value such as the port the server was given.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    },
+    "config_files": {
+      "description": "Configuration files the probe reads and writes, with their format. A file edited by hand is read back, not overwritten.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/config_file"
+      }
+    },
+    "console": {
+      "$ref": "#/$defs/console"
+    },
+    "backup": {
+      "$ref": "#/$defs/backup"
+    }
+  },
+  "allOf": [
+    {
+      "description": "Install steps are required: either shared, or in every declared platform.",
+      "if": {
+        "not": {
+          "required": [
+            "install"
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "platforms": {
             "properties": {
-              "name": {
-                "type": "string",
-                "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+              "linux": {
+                "required": [
+                  "install"
+                ]
               },
-              "protocol": {
-                "enum": [
-                  "tcp",
-                  "udp",
-                  "tcp+udp"
+              "windows": {
+                "required": [
+                  "install"
+                ]
+              },
+              "macos": {
+                "required": [
+                  "install"
                 ]
               }
             }
@@ -126,99 +164,809 @@
         }
       }
     },
-    "resources": {
-      "description": "How the game receives its memory and CPU limits, so the limit applied by the operating system and the limit the game knows always match. Use 'none' when the game takes no such parameter.",
-      "oneOf": [
-        {
-          "type": "object"
-        },
-        {
-          "const": "none"
+    {
+      "description": "A launch section is required: either shared, or in every declared platform.",
+      "if": {
+        "not": {
+          "required": [
+            "launch"
+          ]
         }
-      ]
-    },
-    "variables": {
-      "description": "Settings the user can change. Declared once here (name, type, default, label); where each one is written is declared in 'bindings'.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "type",
-          "label"
-        ],
+      },
+      "then": {
         "properties": {
-          "name": {
-            "type": "string",
-            "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
-          },
-          "type": {
-            "enum": [
-              "boolean",
-              "number",
-              "text",
-              "choice"
-            ]
-          },
-          "label": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      }
-    },
-    "bindings": {
-      "description": "Where each variable is written: a launch argument, a key in a properties file, a path in a JSON, YAML or INI file.",
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "config_files": {
-      "description": "Configuration files the probe reads and writes, with their format.",
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "console": {
-      "description": "Regular expressions matched against server output to detect the ready state, a player joining and a player leaving.",
-      "type": "object"
-    },
-    "backup": {
-      "description": "Paths worth restoring ('include') and paths to leave out, such as logs and caches ('exclude').",
-      "type": "object",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "platforms": {
+            "properties": {
+              "linux": {
+                "required": [
+                  "launch"
+                ]
+              },
+              "windows": {
+                "required": [
+                  "launch"
+                ]
+              },
+              "macos": {
+                "required": [
+                  "launch"
+                ]
+              }
+            }
           }
         }
       }
     }
-  },
+  ],
   "$defs": {
+    "name": {
+      "description": "A name used in placeholders: lowercase letters, digits and single underscores.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "https_url": {
+      "type": "string",
+      "pattern": "^https://[^\\s]+$"
+    },
+    "template_url": {
+      "description": "An http or https URL, or a placeholder that renders to one, such as {{ versions.selected.url }}.",
+      "type": "string",
+      "pattern": "^(https?://|\\{\\{)"
+    },
+    "relative_path": {
+      "description": "A path relative to the server directory, written with forward slashes. No leading slash, no backslash, no drive letter or colon; tools/validate.py also rejects '..' and Windows reserved names.",
+      "type": "string",
+      "pattern": "^[^/\\\\:][^\\\\:]*$",
+      "maxLength": 512
+    },
     "platform": {
-      "description": "Platform-specific values, such as the executable to launch, overriding the shared sections.",
-      "type": "object"
+      "description": "Platform-specific values. A key set here replaces the shared key of the same name as a whole; values are never merged.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "install": {
+          "$ref": "#/$defs/steps"
+        },
+        "launch": {
+          "$ref": "#/$defs/launch"
+        }
+      }
+    },
+    "versions": {
+      "description": "Where the list of versions offered to the user comes from, the default choice, and whether a newer version is reported as a pending update. The chosen version reaches the install steps as {{ server.version }}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "default",
+        "notify_updates"
+      ],
+      "properties": {
+        "source": {
+          "description": "A JSON document listing the versions. The keys mean the same as the parameters of the resolve_version step.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "list"
+          ],
+          "properties": {
+            "url": {
+              "$ref": "#/$defs/https_url"
+            },
+            "list": {
+              "$ref": "#/$defs/dotted_path"
+            },
+            "id": {
+              "$ref": "#/$defs/dotted_path"
+            },
+            "latest": {
+              "$ref": "#/$defs/dotted_path"
+            },
+            "where": {
+              "$ref": "#/$defs/where"
+            }
+          }
+        },
+        "default": {
+          "description": "Version selected when the user does not choose one: 'latest' or a version id.",
+          "type": "string",
+          "minLength": 1
+        },
+        "notify_updates": {
+          "description": "true when a new server version should be offered as a pending update; false when choosing a version is a deliberate act by the user.",
+          "type": "boolean"
+        }
+      }
+    },
+    "dotted_path": {
+      "description": "Keys separated by dots; a number selects an array element (builds.0.url). No wildcards or expressions.",
+      "type": "string",
+      "pattern": "^[^.\\s]+(\\.[^.\\s]+)*$"
+    },
+    "where": {
+      "description": "Fields a version entry must have, with their exact text values.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/dotted_path"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
     },
     "step": {
-      "description": "One install step. 'type' names a brick implemented by the probe; the other keys are that brick's parameters.",
+      "description": "One install step. 'type' names a brick implemented by the probe; the other keys are that brick's parameters. Unknown parameters are rejected.",
       "type": "object",
       "required": [
         "type"
       ],
       "properties": {
         "type": {
+          "enum": [
+            "resolve_version",
+            "download",
+            "extract",
+            "write_file"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "resolve_version"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_resolve_version"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "download"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_download"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "extract"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_extract"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "write_file"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/step_write_file"
+          }
+        }
+      ]
+    },
+    "step_resolve_version": {
+      "description": "Fetch a JSON document and pick a version from it. Every scalar field of the picked entry becomes {{ versions.selected.<dotted.path> }}. A second resolve_version replaces the selection.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "const": "resolve_version"
+        },
+        "url": {
+          "$ref": "#/$defs/template_url"
+        },
+        "list": {
+          "description": "Dotted path to the array of versions. Without it, the whole document is the selected version.",
+          "$ref": "#/$defs/dotted_path"
+        },
+        "select": {
+          "description": "The version id to pick, or 'latest'. Usually {{ server.version }}.",
           "type": "string",
-          "pattern": "^[a-z0-9]+(_[a-z0-9]+)*$"
+          "minLength": 1
+        },
+        "id": {
+          "description": "Field holding each version's id; 'id' by default.",
+          "$ref": "#/$defs/dotted_path"
+        },
+        "latest": {
+          "description": "Dotted path to the latest version's id. Without it, 'latest' is the first matching entry.",
+          "$ref": "#/$defs/dotted_path"
+        },
+        "where": {
+          "$ref": "#/$defs/where"
+        }
+      },
+      "dependentRequired": {
+        "list": [
+          "select"
+        ],
+        "select": [
+          "list"
+        ],
+        "id": [
+          "list"
+        ],
+        "latest": [
+          "list"
+        ],
+        "where": [
+          "list"
+        ]
+      }
+    },
+    "step_download": {
+      "description": "Fetch a file over http or https into the server directory. With a checksum, a mismatch leaves nothing at 'dest'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url",
+        "dest"
+      ],
+      "properties": {
+        "type": {
+          "const": "download"
+        },
+        "url": {
+          "$ref": "#/$defs/template_url"
+        },
+        "dest": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "checksum": {
+          "description": "'sha1:<hex>', 'sha256:<hex>' or 'sha512:<hex>'. The hex part may be a placeholder.",
+          "type": "string",
+          "pattern": "^(sha1|sha256|sha512):([0-9a-f]+|\\{\\{[^}]+\\}\\})$"
+        }
+      }
+    },
+    "step_extract": {
+      "description": "Unpack an archive already in the server directory. Entries leaving 'dest' are refused.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "archive"
+      ],
+      "properties": {
+        "type": {
+          "const": "extract"
+        },
+        "archive": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "dest": {
+          "description": "Directory to unpack into; '.' by default.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "format": {
+          "description": "Guessed from the archive name when left out. Cannot hold a placeholder.",
+          "enum": [
+            "zip",
+            "tar.gz",
+            "tar.xz"
+          ]
+        },
+        "strip_components": {
+          "description": "Number of leading path elements to drop from every entry.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "step_write_file": {
+      "description": "Write a file with text from the manifest. Placeholders in 'content' are rendered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "dest"
+      ],
+      "properties": {
+        "type": {
+          "const": "write_file"
+        },
+        "dest": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "runtime": {
+      "description": "Runtimes the game needs. The probe installs them in its own folder, never system-wide.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "java": {
+          "description": "A Java runtime. 'version' is the major version (for example 21), or a placeholder resolved at install time.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version"
+          ],
+          "properties": {
+            "version": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 8
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\{\\{[^}]+\\}\\}$"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "launch": {
+      "description": "The server process: either a runtime's main program ('runtime') or a file in the server directory ('executable'), and its arguments. The working directory is always the server directory. Nothing is passed through a shell.",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "runtime"
+          ]
+        },
+        {
+          "required": [
+            "executable"
+          ]
+        }
+      ],
+      "properties": {
+        "runtime": {
+          "description": "Run the main program of a runtime declared in 'runtime', for example 'java'.",
+          "enum": [
+            "java"
+          ]
+        },
+        "executable": {
+          "description": "File to run, relative to the server directory.",
+          "$ref": "#/$defs/relative_path"
+        },
+        "arguments": {
+          "description": "Arguments passed as they are, one list item per argument. Placeholders are rendered; there is no quoting or word splitting.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "description": "Environment variables set for the server process.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stop": {
+      "description": "How the server is stopped cleanly. 'command' is written to the server console; without it the probe asks the process to exit. After 'timeout_seconds' the process is terminated.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeout_seconds"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      }
+    },
+    "network": {
+      "description": "Every port the game uses. Each port becomes {{ server.port.<name> }}; the first one is also {{ server.port }}. {{ server.ip }} is the address the server must bind to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ports"
+      ],
+      "properties": {
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "protocol"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/name"
+              },
+              "protocol": {
+                "enum": [
+                  "tcp",
+                  "udp",
+                  "tcp+udp"
+                ]
+              },
+              "default": {
+                "description": "The port the game uses out of the box. The probe uses it when it is free; the server may be given another one.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "label": {
+                "$ref": "#/$defs/label"
+              }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "description": "How the game receives its memory limit, so the limit the operating system applies and the limit the game knows always come from the same user entry. 'none' when the game takes no such parameter.",
+      "oneOf": [
+        {
+          "const": "none"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "memory"
+          ],
+          "properties": {
+            "memory": {
+              "description": "Declaring this section makes {{ resources.memory_max_mb }} and {{ resources.memory_min_mb }} available, to be used in launch arguments. Values in MiB.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "default_mb",
+                "minimum_mb"
+              ],
+              "properties": {
+                "default_mb": {
+                  "description": "Memory limit used when the user sets none.",
+                  "type": "integer",
+                  "minimum": 64
+                },
+                "minimum_mb": {
+                  "description": "Smallest memory limit the user may set.",
+                  "type": "integer",
+                  "minimum": 64
+                },
+                "reserve_mb": {
+                  "description": "Part of the limit kept for the process outside what the game manages, such as the Java runtime's own memory. memory_max_mb is the limit minus this reserve.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0
+                },
+                "min_ratio": {
+                  "description": "memory_min_mb is memory_max_mb times this ratio, rounded down.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "default": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "variable": {
+      "description": "One user setting. 'default' is required and must match the type.",
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "label",
+        "default"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "type": {
+          "enum": [
+            "boolean",
+            "number",
+            "text",
+            "choice"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "description": {
+          "description": "Help text shown under the field.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "boolean"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "integer": {
+                "description": "true when only whole numbers are accepted.",
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "max_length": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "choice"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "choices"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "choices": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "label"
+                  ],
+                  "properties": {
+                    "value": {
+                      "description": "Text written to the configuration.",
+                      "type": "string"
+                    },
+                    "label": {
+                      "$ref": "#/$defs/label"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "binding": {
+      "description": "One value written to a configuration file declared in 'config_files'. Either 'variable' (a user setting) or 'value' (fixed text, which may hold placeholders). 'key' is used for properties and INI files ('section' too for INI), 'path' for JSON and YAML.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "variable"
+          ]
+        },
+        {
+          "required": [
+            "value"
+          ]
+        }
+      ],
+      "properties": {
+        "variable": {
+          "$ref": "#/$defs/name"
+        },
+        "value": {
+          "type": "string"
+        },
+        "as": {
+          "description": "Type a 'value' is written as in JSON and YAML files: 'text' by default. A variable is always written with its own type.",
+          "enum": [
+            "text",
+            "number",
+            "boolean"
+          ]
+        },
+        "file": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "key": {
+          "description": "The key, written exactly as in the file. Dots are part of the key.",
+          "type": "string",
+          "minLength": 1
+        },
+        "section": {
+          "description": "INI section holding the key. Left out: the key is before any section.",
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "description": "Keys from the top of the document down to the value; a number selects an array element.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      },
+      "dependentRequired": {
+        "as": [
+          "value"
+        ]
+      }
+    },
+    "config_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "format": {
+          "enum": [
+            "properties",
+            "json",
+            "yaml",
+            "ini"
+          ]
+        }
+      }
+    },
+    "console": {
+      "description": "Regular expressions (RE2 syntax, the common subset of Go and most engines: no look-around, no back-references) matched against each console line without its line ending. 'player_join' and 'player_leave' capture the player name in a group named 'player'. Every manifest with a console section has sample lines in tests/<id>/console.yaml.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "ready": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_join": {
+          "type": "string",
+          "minLength": 1
+        },
+        "player_leave": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "backup": {
+      "description": "Paths worth restoring ('include') and paths inside them to leave out, such as logs, caches and lock files ('exclude'). Relative to the server directory; a trailing slash marks a directory; '*' matches within one name and '**' any number of directories.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include"
+      ],
+      "properties": {
+        "include": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relative_path"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relative_path"
+          }
         }
       }
     }

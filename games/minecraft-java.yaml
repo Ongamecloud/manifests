@@ -1,0 +1,256 @@
+# Minecraft: Java Edition dedicated server, as published by Mojang Studios.
+# Sources: the official version manifest and the server jars it points to.
+schema_version: 1
+id: minecraft-java
+name: "Minecraft: Java Edition"
+description: The official Minecraft Java Edition server from Mojang Studios.
+category: custom
+
+# The server prints this link and refuses to start until eula.txt says
+# eula=true. The apps show it to the user before the server is created.
+terms:
+  label: Minecraft End User License Agreement
+  url: https://aka.ms/MinecraftEULA
+
+# The server is a Java program, so it runs wherever its Java runtime does.
+platforms:
+  linux: {}
+  windows: {}
+  macos: {}
+
+# Releases only (snapshots are left out). Choosing a Minecraft version is a
+# deliberate choice, because worlds and clients must match it, so a new
+# release is not pushed as an update.
+versions:
+  source:
+    url: https://piston-meta.mojang.com/mc/game/version_manifest_v2.json
+    list: versions
+    latest: latest.release
+    where:
+      type: release
+  default: latest
+  notify_updates: false
+
+install:
+  # Pick the version entry from the official list...
+  - type: resolve_version
+    url: https://piston-meta.mojang.com/mc/game/version_manifest_v2.json
+    list: versions
+    select: "{{ server.version }}"
+    latest: latest.release
+    where:
+      type: release
+  # ...then read that version's own document, which holds the server jar
+  # and the Java version it needs. Releases older than 1.2.5 publish no
+  # server jar, and their install stops with a clear error at the next step.
+  - type: resolve_version
+    url: "{{ versions.selected.url }}"
+  - type: download
+    url: "{{ versions.selected.downloads.server.url }}"
+    dest: server.jar
+    checksum: "sha1:{{ versions.selected.downloads.server.sha1 }}"
+  # Written once the user has accepted the terms above.
+  - type: write_file
+    dest: eula.txt
+    content: "eula=true\n"
+
+# Each version document names the Java major version it needs: 8 up to
+# 1.16.5, then 16, 17, 21 (from 1.20.5) and 25 (from 26.1). The 1.6.x
+# documents name none, so those releases cannot be installed.
+runtime:
+  java:
+    version: "{{ versions.selected.javaVersion.majorVersion }}"
+
+launch:
+  runtime: java
+  arguments:
+    - "-Xms{{ resources.memory_min_mb }}M"
+    - "-Xmx{{ resources.memory_max_mb }}M"
+    - -jar
+    - server.jar
+    - nogui
+
+# "stop" saves every world before exiting; a large world can take a while.
+stop:
+  command: stop
+  timeout_seconds: 60
+
+# Query and RCON are off by default, so only the game port is used.
+network:
+  ports:
+    - name: game
+      protocol: tcp
+      default: 25565
+      label: Game
+
+# -Xmx caps the Java heap only. The Java runtime itself needs memory on top
+# of it, so 512 MiB of the limit is kept for it.
+resources:
+  memory:
+    default_mb: 2048
+    minimum_mb: 1536
+    reserve_mb: 512
+    min_ratio: 0.5
+
+variables:
+  - name: motd
+    type: text
+    label: Server description
+    description: Shown under the server name in the multiplayer list.
+    default: A Minecraft Server
+    max_length: 150
+  - name: max_players
+    type: number
+    label: Maximum players
+    default: 20
+    min: 1
+    max: 1000
+    integer: true
+  - name: gamemode
+    type: choice
+    label: Game mode
+    default: survival
+    choices:
+      - value: survival
+        label: Survival
+      - value: creative
+        label: Creative
+      - value: adventure
+        label: Adventure
+      - value: spectator
+        label: Spectator
+  - name: difficulty
+    type: choice
+    label: Difficulty
+    default: easy
+    choices:
+      - value: peaceful
+        label: Peaceful
+      - value: easy
+        label: Easy
+      - value: normal
+        label: Normal
+      - value: hard
+        label: Hard
+  - name: hardcore
+    type: boolean
+    label: Hardcore
+    description: Players are banned from the world when they die.
+    default: false
+  - name: online_mode
+    type: boolean
+    label: Check player accounts
+    description: Only players with a genuine Minecraft account can join.
+    default: true
+  # Recent releases turn the allowlist on by default. It is off here so
+  # friends can join right away; the server owner can turn it on.
+  - name: white_list
+    type: boolean
+    label: Allowlist
+    description: Only players on the allowlist can join.
+    default: false
+  - name: allow_flight
+    type: boolean
+    label: Allow flight
+    description: Do not kick players who fly in survival, for example with mods.
+    default: false
+  - name: view_distance
+    type: number
+    label: View distance (chunks)
+    default: 10
+    min: 3
+    max: 32
+    integer: true
+  - name: simulation_distance
+    type: number
+    label: Simulation distance (chunks)
+    default: 10
+    min: 3
+    max: 32
+    integer: true
+  - name: spawn_protection
+    type: number
+    label: Spawn protection radius
+    description: Blocks around spawn that only operators can change. 0 turns it off.
+    default: 16
+    min: 0
+    max: 1000
+    integer: true
+  - name: level_seed
+    type: text
+    label: World seed
+    description: Used when the world is first created. Empty for a random seed.
+    default: ""
+
+config_files:
+  - path: server.properties
+    format: properties
+
+bindings:
+  # Set by the probe from the address and port the server was given.
+  - file: server.properties
+    key: server-ip
+    value: "{{ server.ip }}"
+  - file: server.properties
+    key: server-port
+    value: "{{ server.port.game }}"
+  - file: server.properties
+    key: motd
+    variable: motd
+  - file: server.properties
+    key: max-players
+    variable: max_players
+  - file: server.properties
+    key: gamemode
+    variable: gamemode
+  - file: server.properties
+    key: difficulty
+    variable: difficulty
+  - file: server.properties
+    key: hardcore
+    variable: hardcore
+  - file: server.properties
+    key: online-mode
+    variable: online_mode
+  - file: server.properties
+    key: white-list
+    variable: white_list
+  - file: server.properties
+    key: allow-flight
+    variable: allow_flight
+  - file: server.properties
+    key: view-distance
+    variable: view_distance
+  - file: server.properties
+    key: simulation-distance
+    variable: simulation_distance
+  - file: server.properties
+    key: spawn-protection
+    variable: spawn_protection
+  - file: server.properties
+    key: level-seed
+    variable: level_seed
+
+# Lines look like "[08:10:15] [Server thread/INFO]: Steve joined the game".
+# Recent releases (26.3, for example) prefix join and leave messages with
+# "System chat: "; older ones (1.21.1, for example) do not.
+# Anchoring on the thread name keeps chat messages from matching.
+# Sample lines: tests/minecraft-java/console.yaml.
+console:
+  ready: '^\[[0-9:]+\] \[Server thread/INFO\]: Done \([0-9.,]+s\)! For help, type "help"'
+  player_join: '^\[[0-9:]+\] \[Server thread/INFO\]: (?:System chat: )?(?P<player>[A-Za-z0-9_]{1,16})(?: \(formerly known as [A-Za-z0-9_]{1,16}\))? joined the game$'
+  player_leave: '^\[[0-9:]+\] \[Server thread/INFO\]: (?:System chat: )?(?P<player>[A-Za-z0-9_]{1,16}) left the game$'
+
+# The world (the vanilla server keeps the Nether and the End inside it),
+# the settings and the player lists. The jar, libraries/ and versions/ are
+# downloaded again by the install.
+backup:
+  include:
+    - world/
+    - server.properties
+    - ops.json
+    - whitelist.json
+    - banned-players.json
+    - banned-ips.json
+  exclude:
+    - world/session.lock

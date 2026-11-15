@@ -13,10 +13,16 @@ commit messages and pull requests.
    the game.
 2. Copy `templates/example.yaml` to `games/<id>.yaml`. The file name must
    match the `id`.
-3. Fill in every section. Remove what the game does not use, and keep a short
+3. Fill in every section, using [docs/manifest-format.md](docs/manifest-format.md)
+   as the reference. Remove what the game does not use, and keep a short
    comment on any value that is not obvious.
-4. Validate it locally (see "Validate locally" in [README.md](README.md)).
-5. Open a pull request. Describe how you tested the manifest: on which
+4. If the manifest has a `console` section, create `tests/<id>/console.yaml`
+   with lines copied from real server output: the ready line, a player
+   joining, a player leaving, and a few lines that must not match (such as
+   a chat message quoting a join).
+5. Validate it locally (see "Validate locally" in [README.md](README.md)).
+6. Add the game to the table in [README.md](README.md#games).
+7. Open a pull request. Describe how you tested the manifest: on which
    operating systems you ran the server and which version.
 
 ### Things to get right
@@ -25,18 +31,20 @@ commit messages and pull requests.
   A missing platform is fine: the game is shown as unavailable there. Most
   SteamCMD servers do not run on macOS.
 - **Ports.** Declare every port the game uses, not only the main one.
-- **Resources.** Say which launch argument receives the memory limit and in
-  what unit, so the limit the game knows matches the limit the system
-  enforces. Use `none` if the game takes no such argument.
+- **Resources.** Pass `{{ resources.memory_max_mb }}` to the launch argument
+  that receives the memory limit, in the unit the game expects, so the limit
+  the game knows matches the limit the system enforces. Use
+  `resources: none` if the game takes no such argument.
 - **Versions.** Set `notify_updates: true` when a new server version should be
   offered as an update. Set it to `false` only when choosing a version is a
   deliberate choice for players.
-- **SteamCMD games.** Use a single `steamcmd` install step with the app id.
-  If the server can only be downloaded by an account that owns the game, set
-  `install.requires_owned_game: true`.
-- **Console regexes.** Test them against real server output for the ready
-  line, a player joining and a player leaving. Include a few sample lines in
-  the pull request description.
+- **SteamCMD games.** They will use a single `steamcmd` install step with the
+  app id, and declare when the server can only be downloaded by an account
+  that owns the game. The probe does not provide the `steamcmd` brick yet,
+  so SteamCMD manifests cannot be submitted until it does.
+- **Console regexes.** Test them against real server output: the sample lines
+  in `tests/<id>/console.yaml` are checked by the validator. Anchor them on
+  the log prefix so chat messages cannot imitate a join.
 - **Backup.** Include everything needed to restore the server (configuration,
   saves, worlds). Exclude logs and caches.
 - **Sources.** Download only from official, publicly documented sources for
@@ -59,7 +67,8 @@ how you checked the fix. Never change an existing `id`.
 
 The schema and the format are read by the probe, the apps and the website.
 Open an issue to discuss a format change before sending a pull request. A
-change that would make existing manifests invalid increases `format_version`.
+change that would make existing manifests invalid increases `schema_version`.
+A new brick appears in the schema only once the probe implements it.
 
 ## Review
 
